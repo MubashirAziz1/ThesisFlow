@@ -5,7 +5,6 @@ from collections.abc import AsyncGenerator
 
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 
 from app.gateway.routers import run_thread
@@ -58,8 +57,6 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
-
-    app.add_middleware(TraceMiddleware)
 
     app.include_router(run_thread.router)
 

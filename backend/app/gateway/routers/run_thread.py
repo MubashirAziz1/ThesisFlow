@@ -8,6 +8,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/threads", tags=["runs"])
 
+@router.post("/{thread_id}/runs", response_model=RunResponse)
+async def create_run(
+    thread_id: ThreadId,
+    body: RunCreateRequest,
+    request: Request,
+    idempotency_key: IdempotencyKeyHeader = None,
+) -> RunResponse:
+    """Create a background run (returns immediately)."""
+    record = await start_run(
+        body,
+        thread_id,
+        request,
+        idempotency_key=_scope_http_run_idempotency_key(request, thread_id, idempotency_key),
+    )
+    return _record_to_response(record)
+
+
 @router.post("/{thread_id}/runs/stream")
 @require_permission("runs", "create", owner_check=True, require_existing=True)
 async def stream_run(
