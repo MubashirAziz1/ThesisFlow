@@ -30,7 +30,7 @@ def normalize_stream_modes(raw: list[str] | str | None) -> list[str]:
     if raw is None:
         modes = ["values"]
     elif isinstance(raw, str):
-        modes = [raw]cls
+        modes = [raw]
     else:
         modes = raw or ["values"]
 
