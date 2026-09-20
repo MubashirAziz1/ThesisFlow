@@ -11,8 +11,12 @@ import json
 import logging
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import Any
 
 from fastapi import HTTPException, Request
+
+from langchain_core.messages import BaseMessage
+from langchain_core.messages.utils import convert_to_messages
 
 
 from app.gateway.run_models import RunCreateRequest
@@ -20,7 +24,45 @@ from packages.harness.thesisflow.utils.thread_id import validate_thread_id
 from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_modes
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(_name__)
+
+
+def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
+    """ Convert LangGraph Platform input format to LangChain state dict. """
+
+    if raw_input is None:
+        return {}
+    result = raw_input
+    messages = raw_input.get("messages")
+    if messages and isinstance(messages, list):
+        converted: list[Any] = []
+        for index, msg in enumerate(messages):
+            if isinstance(msg, BaseMessage):
+                converted.append(msg)
+            elif isinstance(msg, dict):
+                try:
+                    converted.extend(convert_to_messages([msg]))
+                except (ValueError, TypeError, NotImplementedError) as exc:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid message at input.messages[{index}]: {exc}",
+                    ) from exc
+            else:
+                converted.append(msg)
+
+        # if not trusted_internal:
+        #     converted = [_strip_external_message_metadata(message) for message in converted]
+        
+        result = {**raw_input, "messages": converted}
+
+    # if not trusted_internal:
+    #     delegations = result.get("delegations")
+    #     if isinstance(delegations, list):
+    #         cleaned = [_strip_external_delegation_verdict(entry) for entry in delegations]
+    #         if cleaned != delegations:
+    #             result = {**result, "delegations": cleaned}
+
+    return result
 
 
 
@@ -41,66 +83,51 @@ async def start_run(
     
 
     stream_modes = normalize_stream_modes(body.stream_mode)
-    bridge = get_stream_bridge(request)
-    run_mgr = get_run_manager(request)
-    run_ctx = get_run_context(request)
-
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
     # Explicitly mention the model to use here.
     
-    owner_user_id = get_trusted_internal_owner_user_id(request)
 
+    # user = getattr(request.state, "user", None)
 
-    # Stateless run endpoints carry thread_id in the request *body*, so the
-    # @require_permission(owner_check=True) decorator -- which resolves ownership
-    # from the path param -- cannot protect them. Enforce thread ownership here,
-    # before any run is created, so one user cannot start runs on (or read /wait
-    # checkpoint state from) another user's thread. Missing rows (auto-created
-    # temp threads) and NULL-owner rows (shared / pre-auth data) stay accessible
-    # via check_access; only a thread already owned by another user is rejected
-    # with 404, matching thread_runs.py's anti-enumeration behaviour. Internal
-    # channel runs act on behalf of the connection owner carried in
-    # X-DeerFlow-Owner-User-Id, so they are scoped to that owner instead of
-    # bypassing the check -- a leaked internal token must not grant cross-user
-    # thread access.
+    # async def thread_access_allowed() -> bool:
+    #     if user is None:
+    #         if not require_existing_thread:
+    #             return True
+    #         return await run_ctx.thread_store.get(thread_id) is not None
+    #     allowed = await run_ctx.thread_store.check_access(
+    #         thread_id,
+    #         str(user.id),
+    #         require_existing=require_existing_thread,
+    #     )
+    #     if not allowed and owner_user_id and getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
+    #         # Channel workers may also act for the connection owner named in
+    #         # the trusted header (e.g. claiming a legacy default-owned channel
+    #         # thread for its real owner).
+    #         allowed = await run_ctx.thread_store.check_access(
+    #             thread_id,
+    #             owner_user_id,
+    #             require_existing=require_existing_thread,
+    #         )
+    #     return allowed
 
+    # if not await thread_access_allowed():
+    #     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
 
-    user = getattr(request.state, "user", None)
-
-    async def thread_access_allowed() -> bool:
-        if user is None:
-            if not require_existing_thread:
-                return True
-            return await run_ctx.thread_store.get(thread_id) is not None
-        allowed = await run_ctx.thread_store.check_access(
-            thread_id,
-            str(user.id),
-            require_existing=require_existing_thread,
-        )
-        if not allowed and owner_user_id and getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
-            # Channel workers may also act for the connection owner named in
-            # the trusted header (e.g. claiming a legacy default-owned channel
-            # thread for its real owner).
-            allowed = await run_ctx.thread_store.check_access(
-                thread_id,
-                owner_user_id,
-                require_existing=require_existing_thread,
-            )
-        return allowed
-
-    if not await thread_access_allowed():
-        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
-
-    owner_context_token = set_current_user(SimpleNamespace(id=owner_user_id)) if owner_user_id else None
+    # owner_context_token = set_current_user(SimpleNamespace(id=owner_user_id)) if owner_user_id else None
     try:
         agent_factory = resolve_agent_factory(body.assistant_id)
-        is_internal_caller = getattr(getattr(request, "state", None), "auth_source", None) == AUTH_SOURCE_INTERNAL
-        command = getattr(body, "command", None)
-        if command and command.get("resume") is not None:
-            graph_input = Command(resume=command["resume"])
-        else:
-            graph_input = normalize_input(body.input, trusted_internal=is_internal_caller)
+
+
+        # command = getattr(body, "command", None)
+        # if command and command.get("resume") is not None:
+        #     graph_input = Command(resume=command["resume"])
+        # else:
+ 
+        graph_input = normalize_input(body.input)
+
+
+
         # deerflow_trace_id is server-issued, so the caller's value is replaced
         # here at the trust boundary. body.metadata forks two ways -- through
         # build_run_config into config["metadata"], which the run worker
@@ -109,8 +136,10 @@ async def start_run(
         # without this the run record is the one surface that persists a forged
         # id, disagreeing with the response header, the logs, and the
         # checkpoint. The caller's own metadata keys are preserved.
-        run_metadata = dict(body.metadata) if isinstance(body.metadata, dict) else {}
-        run_metadata[DEERFLOW_TRACE_METADATA_KEY] = ensure_trace_id()
+        
+        
+        #run_metadata = dict(body.metadata) if isinstance(body.metadata, dict) else {}
+        #run_metadata[DEERFLOW_TRACE_METADATA_KEY] = ensure_trace_id()
 
         config = build_run_config(thread_id, body.config, run_metadata, assistant_id=body.assistant_id)
         await apply_checkpoint_to_run_config(config, body=body, thread_id=thread_id, request=request)
