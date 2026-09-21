@@ -10,12 +10,11 @@ import asyncio
 import json
 import logging
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import Any
 
 from fastapi import HTTPException, Request
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.messages.utils import convert_to_messages
 
 
@@ -25,6 +24,8 @@ from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_mo
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 
 logger = logging.getLogger(_name__)
+
+_DEFAULT_ASSISTANT_ID = "lead_agent"
 
 
 def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
@@ -63,6 +64,47 @@ def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
     #             result = {**result, "delegations": cleaned}
 
     return result
+
+
+def build_run_config(thread_id: str, *, assistant_id: str | None = None) -> dict[str, Any]:
+    
+    config: dict[str, Any] = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }
+
+    if assistant_id and assistant_id != _DEFAULT_ASSISTANT_ID:
+        normalized = assistant_id.strip().lower().replace("_", "-")
+        if not normalized or not re.fullmatch(r"[a-z0-9-]+", normalized):
+            raise ValueError(f"Invalid assistant_id {assistant_id!r}: must contain only letters, digits, and hyphens after normalization.")
+
+        config["configurable"]["agent_name"] = normalized
+
+    return config
+
+async def _load_scope_agent_config(
+    *,
+    assistant_id: str | None,
+    user_id: str | None,
+) -> Any | None:
+    
+    if not assistant_id or assistant_id == _DEFAULT_ASSISTANT_ID:
+        return None
+    normalized = assistant_id.strip().lower().replace("_", "-")
+    try:
+        return await asyncio.to_thread(
+            load_agent_config,
+            normalized,
+            user_id=user_id,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        ) from exc
+
+
 
 
 
@@ -127,47 +169,46 @@ async def start_run(
         graph_input = normalize_input(body.input)
 
 
-
-        # deerflow_trace_id is server-issued, so the caller's value is replaced
-        # here at the trust boundary. body.metadata forks two ways -- through
-        # build_run_config into config["metadata"], which the run worker
-        # restamps, and through create_or_reject into the run record, which the
-        # runs API echoes verbatim. Only the first is covered downstream, so
-        # without this the run record is the one surface that persists a forged
-        # id, disagreeing with the response header, the logs, and the
-        # checkpoint. The caller's own metadata keys are preserved.
-        
         
         #run_metadata = dict(body.metadata) if isinstance(body.metadata, dict) else {}
         #run_metadata[DEERFLOW_TRACE_METADATA_KEY] = ensure_trace_id()
 
-        config = build_run_config(thread_id, body.config, run_metadata, assistant_id=body.assistant_id)
-        await apply_checkpoint_to_run_config(config, body=body, thread_id=thread_id, request=request)
+        config = build_run_config(thread_id, assistant_id=body.assistant_id)
 
-        replay_kind = run_metadata.get("replay_kind")
-        target_message_id = run_metadata.get("regenerate_from_message_id")
-        scope_graph_input = graph_input if isinstance(graph_input, dict) else {"messages": []}
-        scope_messages = scope_graph_input.get("messages")
-        candidate_has_scope = isinstance(scope_messages, list) and any(isinstance(message, BaseMessage) and KNOWLEDGE_SCOPE_KEY in message.additional_kwargs for message in scope_messages)
-        current_human_message = _current_human_message(graph_input)
-        current_message_has_scope = current_human_message is not None and KNOWLEDGE_SCOPE_KEY in current_human_message.additional_kwargs
-        replay_requires_scope_recovery = isinstance(graph_input, Command) or (isinstance(target_message_id, str) and bool(target_message_id) and (replay_kind != "edit" or not current_message_has_scope))
-        is_human_input_response = current_human_message is not None and "human_input_response" in current_human_message.additional_kwargs
+        ##If the user asks to resume froim the previous session or to continue from the specific checkpoint, then its needed.
+        #await apply_checkpoint_to_run_config(config, body=body, thread_id=thread_id, request=request)
+
+        # replay_kind = run_metadata.get("replay_kind")
+        # target_message_id = run_metadata.get("regenerate_from_message_id")
+        
+        ## USe the code below for further context recovery or for thesis case.
+        # scope_graph_input = graph_input if isinstance(graph_input, dict) else {"messages": []}
+        # scope_messages = scope_graph_input.get("messages")
+        # candidate_has_scope = isinstance(scope_messages, list) and any(isinstance(message, BaseMessage) and KNOWLEDGE_SCOPE_KEY in message.additional_kwargs for message in scope_messages)
+        # current_human_message = _current_human_message(graph_input)
+        # current_message_has_scope = current_human_message is not None and KNOWLEDGE_SCOPE_KEY in current_human_message.additional_kwargs
+        # replay_requires_scope_recovery = isinstance(graph_input, Command) or (isinstance(target_message_id, str) and bool(target_message_id) and (replay_kind != "edit" or not current_message_has_scope))
+        # is_human_input_response = current_human_message is not None and "human_input_response" in current_human_message.additional_kwargs
+        
+        
         # Clarification and edit-replay messages may intentionally replace the
         # source scope. If either client omits its current selector snapshot,
         # inherit the source turn's authoritative scope instead of widening the
         # run to every operator-approved dataset. Other replay paths always use
         # server recovery regardless of client input.
-        is_scope_recovery = replay_requires_scope_recovery or (is_human_input_response and not current_message_has_scope)
-        recovery_scope = (
-            await _recover_run_knowledge_scope(
-                request,
-                thread_id=thread_id,
-                target_message_id=(target_message_id if isinstance(target_message_id, str) else None),
-            )
-            if is_scope_recovery
-            else None
-        )
+        
+        # is_scope_recovery = replay_requires_scope_recovery or (is_human_input_response and not current_message_has_scope)
+        # recovery_scope = (
+        #     await _recover_run_knowledge_scope(
+        #         request,
+        #         thread_id=thread_id,
+        #         target_message_id=(target_message_id if isinstance(target_message_id, str) else None),
+        #     )
+        #     if is_scope_recovery
+        #     else None
+        # )
+        
+        
         agent_config = (
             await _load_scope_agent_config(
                 assistant_id=body.assistant_id,
