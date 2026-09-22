@@ -23,7 +23,7 @@ from packages.harness.thesisflow.utils.thread_id import validate_thread_id
 from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_modes
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
-
+from app.gateway.deps import get_run_manager
 
 logger = logging.getLogger(_name__)
 
@@ -74,10 +74,16 @@ def build_run_config(thread_id: str, *, assistant_id: str | None = None) -> dict
 
     return config
 
+def resolve_agent_factory(assistant_id: str | None):
+    """ Resolve the agent factory callable from config. """
+    from deerflow.agents.lead_agent.agent import assemble_lead_agent
+
+    return assemble_lead_agent
 
 async def start_run(
     body: RunCreateRequest,
     thread_id: str,
+    request: Request
 ) -> RunRecord:
     """ Create a RunRecord and launch the background agent task. """
 
@@ -88,6 +94,7 @@ async def start_run(
     
 
     stream_modes = normalize_stream_modes(body.stream_mode)
+    run_mgr = get_run_manager(request) 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
     try:

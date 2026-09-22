@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import cast
 from collections.abc import Callable
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from packages.harness.thesisflow.runtime import RunManager
 
@@ -20,5 +20,6 @@ def _require(attr: str, label: str) -> Callable[[Request], T]:
 
     dep.__name__ = dep.__qualname__ = f"get_{attr}"
     return dep
+
 
 get_run_manager: Callable[[Request], RunManager] = _require("run_manager", "Run manager")
