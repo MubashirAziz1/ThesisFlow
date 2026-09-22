@@ -22,6 +22,8 @@ from app.gateway.run_models import RunCreateRequest
 from packages.harness.thesisflow.utils.thread_id import validate_thread_id
 from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_modes
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
+from packages.harness.thesisflow.runtime.runs.manager import RunRecord
+
 
 logger = logging.getLogger(_name__)
 
@@ -76,10 +78,6 @@ def build_run_config(thread_id: str, *, assistant_id: str | None = None) -> dict
 async def start_run(
     body: RunCreateRequest,
     thread_id: str,
-    request: Request,
-    *,
-    idempotency_key: str | None = None,
-    require_existing_thread: bool = False,
 ) -> RunRecord:
     """ Create a RunRecord and launch the background agent task. """
 
