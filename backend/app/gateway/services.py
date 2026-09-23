@@ -101,16 +101,41 @@ async def start_run(
         agent_factory = resolve_agent_factory(body.assistant_id)
         graph_input = normalize_input(body.input)
         config = build_run_config(thread_id, assistant_id=body.assistant_id)
-        agent_config = None
-        await run_agent(    
-                agent_factory=agent_factory,
-                graph_input=graph_input,
-                config=config,
-                stream_modes=stream_modes,
-                stream_subgraphs=body.stream_subgraphs,
-                interrupt_before=body.interrupt_before,
-                interrupt_after=body.interrupt_after,
+
+        async def agent_worker(record: RunRecord) -> None:
+
+            await run_agent(
+                    run_mgr,
+                    record,   
+                    agent_factory=agent_factory,
+                    graph_input=graph_input,
+                    config=config,
+                    stream_modes=stream_modes,
+                    stream_subgraphs=body.stream_subgraphs,
+                    interrupt_before=body.interrupt_before,
+                    interrupt_after=body.interrupt_after,
+                    )
+
+        try:
+            record = await run_mgr.create_or_reject(
+                    thread_id,
+                    body.assistant_id,
+                    on_disconnect=disconnect,
+                    model_name=model_name,
+                    user_id=owner_user_id,
                 )
+            worker = agent_worker(record)
+
+            try:
+                record.task = asyncio.create_task(worker)
+            except Exception as exc:
+                worker.close()
+                raise
+
+        except Exception as exc:
+            raise
+
+        return record   
     
     finally:
         if owner_context_token is not None:
