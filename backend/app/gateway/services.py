@@ -96,47 +96,43 @@ async def start_run(
     stream_modes = normalize_stream_modes(body.stream_mode)
     run_mgr = get_run_manager(request) 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
+  
+  
+    agent_factory = resolve_agent_factory(body.assistant_id)
+    graph_input = normalize_input(body.input)
+    config = build_run_config(thread_id, assistant_id=body.assistant_id)
+
+    async def agent_worker(record: RunRecord) -> None:
+
+        await run_agent(
+                run_mgr,
+                record,   
+                agent_factory=agent_factory,
+                graph_input=graph_input,
+                config=config,
+                stream_modes=stream_modes,
+                stream_subgraphs=body.stream_subgraphs,
+                interrupt_before=body.interrupt_before,
+                interrupt_after=body.interrupt_after,
+                )
 
     try:
-        agent_factory = resolve_agent_factory(body.assistant_id)
-        graph_input = normalize_input(body.input)
-        config = build_run_config(thread_id, assistant_id=body.assistant_id)
-
-        async def agent_worker(record: RunRecord) -> None:
-
-            await run_agent(
-                    run_mgr,
-                    record,   
-                    agent_factory=agent_factory,
-                    graph_input=graph_input,
-                    config=config,
-                    stream_modes=stream_modes,
-                    stream_subgraphs=body.stream_subgraphs,
-                    interrupt_before=body.interrupt_before,
-                    interrupt_after=body.interrupt_after,
-                    )
+        record = await run_mgr.create_or_reject(
+                thread_id,
+                body.assistant_id,
+                on_disconnect=disconnect,
+                model_name=model_name,
+                user_id=owner_user_id,
+            )
+        worker = agent_worker(record)
 
         try:
-            record = await run_mgr.create_or_reject(
-                    thread_id,
-                    body.assistant_id,
-                    on_disconnect=disconnect,
-                    model_name=model_name,
-                    user_id=owner_user_id,
-                )
-            worker = agent_worker(record)
-
-            try:
-                record.task = asyncio.create_task(worker)
-            except Exception as exc:
-                worker.close()
-                raise
-
+            record.task = asyncio.create_task(worker)
         except Exception as exc:
+            worker.close()
             raise
 
-        return record   
-    
-    finally:
-        if owner_context_token is not None:
-            reset_current_user(owner_context_token)
+    except Exception as exc:
+        raise
+
+    return record   
