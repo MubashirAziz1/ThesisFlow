@@ -1,0 +1,25 @@
+# Logging
+
+log_level: info
+
+models:
+  - name: doubao-seed-1.8
+    display_name: Doubao-Seed-1.8
+    use: deerflow.models.patched_deepseek:PatchedChatDeepSeek
+    model: doubao-seed-1-8-251228
+    api_base: https://ark.cn-beijing.volces.com/api/v3
+    api_key: $VOLCENGINE_API_KEY
+    timeout: 600.0
+    max_retries: 2
+    context_window: 262144     # Total prompt + completion capacity
+    supports_thinking: true
+    supports_vision: true
+    supports_reasoning_effort: true
+    when_thinking_enabled:
+      extra_body:
+        thinking:
+          type: enabled
+    when_thinking_disabled:
+      extra_body:
+        thinking:
+          type: disabled
