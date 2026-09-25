@@ -1,16 +1,13 @@
 import logging
 import os
-from collections.abc import Mapping
-from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Any, Self
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, Field
 
-
-from deerflow.config.model_config import ModelConfig
+from ..config.model_config import ModelConfig
 
 load_dotenv()
 
@@ -21,22 +18,35 @@ class AppConfig(BaseModel):
 
     log_level: str = Field(
         default="info",
-        description=format_field_description(
-            "log_level",
-            field_doc="Logging level for deerflow and app modules (debug/info/warning/error); third-party libraries are not affected.",
-        ),
+        description= "Logging level for app modules: debug, info, warning, or error."
     )
-
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
 
+    @classmethod
+    def from_file(cls, config_path: str | None = None) -> Self:
+        """ Load config from YAML file. """
+        
+        resolved_path = cls.resolve_config_path(config_path)
+        with open(resolved_path, encoding="utf-8") as f:
+            return cls._from_yaml_text(f.read(), resolved_path)
 
     @classmethod
+    def _from_yaml_text(cls, text: str, resolved_path: Path) -> Self:
+        """ Build the config from already-read YAML *text* of *resolved_path*. """
+        
+        config_data = yaml.safe_load(text) or {}
+        config_data = cls.resolve_env_variables(config_data)
+        result = cls.model_validate(config_data)
+        if not result.models:
+            logger.warning(
+                "No models are configured in %s. Add at least one entry under `models:` (see the commented examples in config.example.yaml) or run `make setup`.",
+                resolved_path,
+            )
+        return result
+    
+    @classmethod
     def resolve_env_variables(cls, config: Any) -> Any:
-        """
-        Recursively resolve environment variables in the config.
-        Environment variables are resolved using the `os.getenv` function. Example: $OPENAI_API_KEY
-
-        """
+        """ Recursively resolve environment variables in the config. """
         if isinstance(config, str):
             if config.startswith("$"):
                 env_value = os.getenv(config[1:])
@@ -51,38 +61,11 @@ class AppConfig(BaseModel):
         return config
 
 
-def get_app_config() -> AppConfig:
-    """Get the DeerFlow config instance.
+    def get_model_config(self, name: str) -> ModelConfig | None:
+        """ Get the model config by name. """
+       
+        for model in self.models:
+            if model.name == name:
+                return model
 
-    Returns a cached singleton instance and automatically reloads it when the
-    underlying config file path or content signature changes. Use
-    `reload_app_config()` to force a reload, or `reset_app_config()` to clear
-    the cache.
-    """
-    global _app_config, _app_config_path, _app_config_mtime, _app_config_signature
-
-    runtime_override = _current_app_config.get()
-    if runtime_override is not None:
-        return runtime_override
-
-    if _app_config is not None and _app_config_is_custom:
-        return _app_config
-
-    resolved_path = AppConfig.resolve_config_path()
-    current_mtime = _get_config_mtime(resolved_path)
-    current_signature = _get_config_signature(resolved_path)
-
-    should_reload = _app_config is None or _app_config_path != resolved_path or _app_config_signature != current_signature
-    if should_reload:
-        if _app_config_path == resolved_path and _app_config_mtime is not None and current_mtime is not None and _app_config_mtime != current_mtime:
-            logger.info(
-                "Config file has been modified (mtime: %s -> %s), reloading AppConfig",
-                _app_config_mtime,
-                current_mtime,
-            )
-        elif _app_config_path == resolved_path and _app_config_signature != current_signature:
-            logger.info("Config file content signature changed, reloading AppConfig")
-        _load_and_cache_app_config(str(resolved_path))
-    from deerflow.config.managed_models import merge_managed_models
-
-    return merge_managed_models(_app_config)
+        return None 
