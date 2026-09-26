@@ -23,6 +23,7 @@ from packages.harness.thesisflow.utils.thread_id import validate_thread_id
 from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_modes
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
+from packages.harness.thesisflow.config import get_app_config
 from app.gateway.deps import get_run_manager
 
 logger = logging.getLogger(_name__)
@@ -65,13 +66,6 @@ def build_run_config(thread_id: str, *, assistant_id: str | None = None) -> dict
         }
     }
 
-    if assistant_id and assistant_id != _DEFAULT_ASSISTANT_ID:
-        normalized = assistant_id.strip().lower().replace("_", "-")
-        if not normalized or not re.fullmatch(r"[a-z0-9-]+", normalized):
-            raise ValueError(f"Invalid assistant_id {assistant_id!r}: must contain only letters, digits, and hyphens after normalization.")
-
-        config["configurable"]["agent_name"] = normalized
-
     return config
 
 def resolve_agent_factory(assistant_id: str | None):
@@ -96,6 +90,16 @@ async def start_run(
     stream_modes = normalize_stream_modes(body.stream_mode)
     run_mgr = get_run_manager(request) 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
+
+    model_name = "doubao-seed-1.8"
+    if model_name:
+        app_config = get_app_config()
+        resolved = app_config.get_model_config(model_name)
+        if resolved is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model {model_name!r} is not in the configured model allowlist",
+            )
   
   
     agent_factory = resolve_agent_factory(body.assistant_id)
