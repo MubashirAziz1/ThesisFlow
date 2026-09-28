@@ -126,7 +126,6 @@ async def start_run(
                 body.assistant_id,
                 on_disconnect=disconnect,
                 model_name=model_name,
-                user_id=owner_user_id,
             )
         worker = agent_worker(record)
 

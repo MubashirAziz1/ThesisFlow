@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 import uuid
+import asyncio
+
 
 
 from .schemas import DisconnectMode, RunStatus
@@ -31,8 +33,9 @@ class RunManager:
 
     def __init__(self) -> None:
         self._runs: dict[str, RunRecord] = {}
-        self._runs_by_thread: dict[str, dict[str, None]] = {}
-        self._worker_id = worker_id or _generate_worker_id()
+        self._lock = asyncio.Lock()
+
+
 
     async def create_or_reject(
         self,
@@ -41,7 +44,6 @@ class RunManager:
         *,
         on_disconnect: DisconnectMode = DisconnectMode.cancel,
         model_name: str | None = None,
-        user_id: str | None = None,
     ) -> RunRecord:
         """Atomically admit a normal agent run for a thread."""
 
@@ -50,8 +52,8 @@ class RunManager:
             assistant_id,
             on_disconnect=on_disconnect,
             model_name=model_name,
-            user_id=user_id,
         )
+
 
     async def _admit_thread_operation(
         self,
@@ -62,6 +64,7 @@ class RunManager:
         model_name: str | None = None,
     ) -> RunRecord:
         """ Atomically check for inflight runs and create a new one. """
+
         run_id = str(uuid.uuid4())
         now = _now_iso()
 
@@ -79,7 +82,6 @@ class RunManager:
         async with self._lock:
 
             self._runs[run_id] = record
-            self._index_run_locked(record)
 
 
         logger.info("Run created: run_id=%s thread_id=%s", run_id, thread_id)
