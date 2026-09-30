@@ -11,10 +11,6 @@ from starlette.background import BackgroundTask
 from app.gateway.run_models import RunCreateRequest
 from packages.harness.thesisflow.utils.thread_id import ThreadId
 
-# region agent log
-with open(r"D:\AI\research_assistant\debug-983b7e.log", "a", encoding="utf-8") as _debug_file:
-    _debug_file.write(json.dumps({"sessionId": "983b7e", "runId": "pre-fix", "hypothesisId": "H1,H2", "location": "app/gateway/routers/run_thread.py:imports", "message": "Router dependencies imported", "data": {"threadIdModule": ThreadId.__module__, "requestModelModule": RunCreateRequest.__module__}, "timestamp": int(time.time() * 1000)}) + "\n")
-# endregion
 
 logger = logging.getLogger(__name__)
 

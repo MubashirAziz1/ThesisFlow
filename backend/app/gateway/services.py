@@ -29,6 +29,7 @@ from app.gateway.deps import get_run_manager
 logger = logging.getLogger(_name__)
 
 _DEFAULT_ASSISTANT_ID = "lead_agent"
+_DEFAULT_RECURSION_LIMIT = 100
 
 
 def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
@@ -58,19 +59,21 @@ def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
     return result
 
 
-def build_run_config(thread_id: str, *, assistant_id: str | None = None) -> dict[str, Any]:
-    
-    config: dict[str, Any] = {
-        "configurable": {
-            "thread_id": thread_id
-        }
-    }
+def build_run_config(thread_id: str, request_config: dict[str, Any] | None,) -> dict[str, Any]:
+
+    config: dict[str, Any] = {"recursion_limit": _DEFAULT_RECURSION_LIMIT}
+    if request_config:
+        configurable = {"thread_id": thread_id}
+        configurable.update(request_config.get("configurable") or {})
+        configurable["thread_id"] = thread_id
+        config["configurable"] = configurable
 
     return config
 
 def resolve_agent_factory(assistant_id: str | None):
     """ Resolve the agent factory callable from config. """
-    from deerflow.agents.lead_agent.agent import assemble_lead_agent
+    
+    from packages.harness.thesisflow.agents.lead_agent.agent import assemble_lead_agent
 
     return assemble_lead_agent
 
@@ -101,10 +104,9 @@ async def start_run(
                 detail=f"Model {model_name!r} is not in the configured model allowlist",
             )
   
-  
+    config = build_run_config(thread_id, body.config)
     agent_factory = resolve_agent_factory(body.assistant_id)
     graph_input = normalize_input(body.input)
-    config = build_run_config(thread_id, assistant_id=body.assistant_id)
 
     async def agent_worker(record: RunRecord) -> None:
 

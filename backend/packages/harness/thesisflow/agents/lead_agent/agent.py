@@ -14,26 +14,22 @@ class LeadAgentAssembly:
     descriptor: Any
     effective_model: str | None = None
 
-
 def _get_runtime_config(config: RunnableConfig) -> dict:
-    """Merge legacy configurable options with LangGraph runtime context."""
 
     cfg = dict(config.get("configurable", {}) or {})
-    context = config.get("context", {}) or {}
-    if isinstance(context, dict):
-        cfg.update(context)
     return cfg
+
 
 def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> LeadAgentAssembly:
    
 
     cfg = _get_runtime_config(config)
     resolved_app_config = app_config
-    
 
-    requested_model_name: str | None = cfg.get("model_name") or cfg.get("model")
-    is_plan_mode = cfg.get("is_plan_mode", False)
-    agent_name = validate_agent_name(cfg.get("agent_name"))
+    # Work is required in this section. Take care of it. Mubashir Aziz. Good Luck
+    requested_model_name: str | None = "Place the code to geth edefault model used for the lead agent"
+    is_plan_mode = "Place the code to geth edefault model used for the lead agent"
+    agent_name = "Place the code to geth edefault model used for the lead agent"
 
     agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
    
