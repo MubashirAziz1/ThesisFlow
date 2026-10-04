@@ -23,7 +23,6 @@ class RunResponse(BaseModel):
     assistant_id: str | None = None
     status: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    multitask_strategy: str = "reject"
     created_at: str = ""
     updated_at: str = ""
 

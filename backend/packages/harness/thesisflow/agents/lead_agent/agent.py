@@ -19,25 +19,17 @@ def _get_runtime_config(config: RunnableConfig) -> dict:
     cfg = dict(config.get("configurable", {}) or {})
     return cfg
 
-
 def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> LeadAgentAssembly:
    
 
     cfg = _get_runtime_config(config)
-    resolved_app_config = app_config
-    agent_config = load_agent_config(agent_name)
-    
+    app_config = app_config
+
     # Work is required in this section. Take care of it. Mubashir Aziz. Good Luck
-    requested_model_name: str | None = "Place the code to geth edefault model used for the lead agent"
-    is_plan_mode = "Place the code to geth edefault model settings used for the lead agent"
-    agent_name = "Place the code to get the default model settings used for the lead agent"
+    requested_model_name: str | None = cfg.get("model_name") or cfg.get("model")
+    is_plan_mode = True
    
-    config.setdefault("configurable", {})["subagent_enabled"] = subagent_enabled
-    if isinstance(config.get("context"), dict):
-        config["context"]["subagent_enabled"] = subagent_enabled
-    available_skills = _available_skill_names(agent_config, is_bootstrap)
-    # Custom agent model from agent config (if any), or None to let _resolve_model_name pick the default
-    agent_model_name = agent_config.model if agent_config and agent_config.model else None
+
 
     # thinking / reasoning precedence: request > custom agent default > runtime
     # default (issue #4336). See ``_resolve_runtime_option`` for the falsy-vs-unset
@@ -46,17 +38,6 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     reasoning_effort = getattr(agent_config, "reasoning_effort", None) if agent_config else None
 
 
-    # Per-agent sampling overrides (temperature / max_tokens) layered on top of
-    # the resolved model profile (issue #4336). None when the agent set none.
-    agent_model_settings = getattr(agent_config, "model_settings", None) if agent_config else None
-    agent_model_overrides = agent_model_settings.model_dump(exclude_none=True) if agent_model_settings else None
-
-    # Final model name resolution: request → agent config → global default, with fallback for unknown names
-    model_name = _resolve_model_name(requested_model_name or agent_model_name, app_config=resolved_app_config)
-
-    # Phase 3: enforce model:use authorization. On deny, fall back to the first
-    # allowed model (graceful) rather than crashing the run (RFC §9).
-    model_name = _authorize_model_name(model_name, context=cfg, app_config=resolved_app_config)
 
     model_config = resolved_app_config.get_model_config(model_name)
 
@@ -157,14 +138,14 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
 def assemble_lead_agent(
     config: RunnableConfig,
+    request,
     *,
     app_config: AppConfig | None = None,
 ) -> LeadAgentAssembly:
     """ Return the compiled lead graph together with its assembly descriptor. """
 
-    runtime_config = _get_runtime_config(config)
-    runtime_app_config = app_config or runtime_config.get("app_config")
-    if not isinstance(runtime_app_config, AppConfig):
-        runtime_app_config = get_app_config()
-   
-    return _assemble_lead_agent(config, app_config=runtime_app_config)
+    try: 
+        runtime_app_config = request.app.state.app_config
+        return _assemble_lead_agent(config, app_config=runtime_app_config)
+    except:
+        raise
