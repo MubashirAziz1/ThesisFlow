@@ -3,12 +3,11 @@ import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
-
 from fastapi import FastAPI
 
 
 from app.gateway.routers import run_thread
-
+from packages.harness.thesisflow.config.app_config import get_app_config
 
 
 # Default logging; lifespan overrides from config.yaml log_level.
@@ -18,11 +17,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    
     """Application lifespan handler."""
-    
+
     # Startup
     logger.info("ThesisFlow- Material Scientist Assistant - Server Starting")
+    try:
+        application_config = get_app_config()
+        app.state.app_config = application_config
+        logger.info("Shared App Configuration loaded Successfully.")
+
+    except Exception as e:
+        error_msg = f"Failed to load shared app_configuration during startup: {e}"
+        logger.exception(error_msg)
+        raise RuntimeError(error_msg) from e
+    
     logger.info("Ready to accept requests")
 
     yield

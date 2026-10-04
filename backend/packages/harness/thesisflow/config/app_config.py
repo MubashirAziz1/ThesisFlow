@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from ..config.model_config import ModelConfig
+from ..config.runtime_paths import existing_project_file
 
 load_dotenv()
 
@@ -46,25 +47,20 @@ class AppConfig(BaseModel):
         return result
 
     @classmethod
-    def resolve_config_path(cls, config_path: str | None = None) -> Path:
+    def resolve_config_path(cls) -> Path:
         """ Resolve the config file path. """
 
-        if config_path:
-            path = Path(config_path)
-            if not Path.exists(path):
-                raise FileNotFoundError(f"Config file specified by param `config_path` not found at {path}")
-            return path
-        elif os.getenv("DEER_FLOW_CONFIG_PATH"):
-            path = Path(os.getenv("DEER_FLOW_CONFIG_PATH"))
-            if not Path.exists(path):
-                raise FileNotFoundError(f"Config file specified by environment variable `DEER_FLOW_CONFIG_PATH` not found at {path}")
-            return path
-        else:
-            raise FileNotFoundError("No such configuration file is present in the project.")
+        try: 
+            project_config = existing_project_file(("config.yaml",))
+            if project_config is not None:
+                return project_config
+        except:          
+            raise FileNotFoundError("`config.yaml` file not found in the project root or legacy backend/repository root locations")
     
     @classmethod
     def resolve_env_variables(cls, config: Any) -> Any:
         """ Recursively resolve environment variables in the config. """
+        
         if isinstance(config, str):
             if config.startswith("$"):
                 env_value = os.getenv(config[1:])
@@ -89,28 +85,23 @@ class AppConfig(BaseModel):
         return None 
 
 _app_config: AppConfig | None = None
-_app_config_path: Path | None = None
 
-def _load_and_cache_app_config(config_path: str | None = None) -> AppConfig:
+def _load_app_config(config_path: str | None = None) -> AppConfig:
     """ Load config from disk and refresh cache metadata. """
-    global _app_config, _app_config_path
 
-    resolved_path = AppConfig.resolve_config_path(config_path)
+    resolved_path = config_path
     raw = resolved_path.read_bytes()
     config = AppConfig._from_yaml_text(raw.decode("utf-8"), resolved_path)
     _app_config = config
-    _app_config_path = resolved_path
 
     return _app_config
 
 def get_app_config() -> AppConfig:
     """ Get the DeerFlow config instance. """
 
-    global _app_config
-
     if _app_config is None:
         resolved_path = AppConfig.resolve_config_path()
-        _load_and_cache_app_config(str(resolved_path))
+        _load_app_config(str(resolved_path))
 
     return _app_config
 

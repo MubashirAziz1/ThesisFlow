@@ -25,13 +25,12 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
     cfg = _get_runtime_config(config)
     resolved_app_config = app_config
-
+    agent_config = load_agent_config(agent_name)
+    
     # Work is required in this section. Take care of it. Mubashir Aziz. Good Luck
     requested_model_name: str | None = "Place the code to geth edefault model used for the lead agent"
-    is_plan_mode = "Place the code to geth edefault model used for the lead agent"
-    agent_name = "Place the code to geth edefault model used for the lead agent"
-
-    agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+    is_plan_mode = "Place the code to geth edefault model settings used for the lead agent"
+    agent_name = "Place the code to get the default model settings used for the lead agent"
    
     config.setdefault("configurable", {})["subagent_enabled"] = subagent_enabled
     if isinstance(config.get("context"), dict):
