@@ -5,8 +5,9 @@ from typing import Any, Self
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from ..config.agent_config import LeadAgentConfig
 from ..config.model_config import ModelConfig
 from ..config.runtime_paths import existing_project_file
 
@@ -17,11 +18,20 @@ logger = logging.getLogger(__name__)
 class AppConfig(BaseModel):
     """Config for the DeerFlow application"""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     log_level: str = Field(
         default="info",
         description= "Logging level for app modules: debug, info, warning, or error."
     )
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
+    lead_agent: LeadAgentConfig = Field(
+        default_factory=LeadAgentConfig,
+        alias="lead-agent",
+        description="Lead agent defaults (model name, plan mode, ...)",
+    )
+
+    _models_by_name: dict[str, ModelConfig] = PrivateAttr(default_factory=dict)
 
     @classmethod
     def from_file(cls, config_path: str | None = None) -> Self:
@@ -51,7 +61,7 @@ class AppConfig(BaseModel):
         """ Resolve the config file path. """
 
         try: 
-            project_config = existing_project_file(("config.yaml",))
+            project_config = existing_project_file(("config.yaml"))
             if project_config is not None:
                 return project_config
         except:          
@@ -76,13 +86,9 @@ class AppConfig(BaseModel):
 
 
     def get_model_config(self, name: str) -> ModelConfig | None:
-        """ Get the model config by name. """
-       
-        for model in self.models:
-            if model.name == name:
-                return model
-
-        return None 
+        """Get the model config by name.
+        """
+        return self._models_by_name.get(name)
 
 _app_config: AppConfig | None = None
 
@@ -91,8 +97,7 @@ def _load_app_config(config_path: str | None = None) -> AppConfig:
 
     resolved_path = config_path
     raw = resolved_path.read_bytes()
-    config = AppConfig._from_yaml_text(raw.decode("utf-8"), resolved_path)
-    _app_config = config
+    _app_config = AppConfig._from_yaml_text(raw.decode("utf-8"), resolved_path)
 
     return _app_config
 

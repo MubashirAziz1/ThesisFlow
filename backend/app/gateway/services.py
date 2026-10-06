@@ -26,7 +26,7 @@ from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.config import get_app_config
 from app.gateway.deps import get_run_manager
 
-logger = logging.getLogger(_name__)
+logger = logging.getLogger(__name__)
 
 _DEFAULT_ASSISTANT_ID = "lead_agent"
 _DEFAULT_RECURSION_LIMIT = 100
@@ -60,13 +60,30 @@ def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def build_run_config(thread_id: str, request_config: dict[str, Any] | None,) -> dict[str, Any]:
+    """ Build the LangGraph RunnableConfig for a run.
+
+    ``configurable`` is seeded from the ``lead-agent:`` section of
+    config.yaml (read through :class:`AppConfig`): the default model name,
+    that model's configured parameters, and plan mode. Request-level
+    ``configurable`` values override the config.yaml defaults, and
+    ``thread_id`` is always forced to the run's thread.
+    """
 
     config: dict[str, Any] = {"recursion_limit": _DEFAULT_RECURSION_LIMIT}
+
+    configurable: dict[str, Any] = {}
+
+    app_config = get_app_config()
+    if app_config.lead_agent:
+        lead_agent = app_config.lead_agent
+        configurable["model_name"] = lead_agent.model_name
+        configurable["is_plan_mode"] = lead_agent.is_plan_mode
+
     if request_config:
-        configurable = {"thread_id": thread_id}
         configurable.update(request_config.get("configurable") or {})
-        configurable["thread_id"] = thread_id
-        config["configurable"] = configurable
+
+    configurable["thread_id"] = thread_id
+    config["configurable"] = configurable
 
     return config
 
@@ -94,9 +111,9 @@ async def start_run(
     run_mgr = get_run_manager(request) 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
-    model_name = "doubao-seed-1.8"
+    app_config = get_app_config()
+    model_name = app_config.lead_agent.model_name
     if model_name:
-        app_config = get_app_config()
         resolved = app_config.get_model_config(model_name)
         if resolved is None:
             raise HTTPException(

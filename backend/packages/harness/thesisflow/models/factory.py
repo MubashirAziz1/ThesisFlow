@@ -3,6 +3,7 @@ import logging
 from langchain.chat_models import BaseChatModel
 from ..config.app_config import AppConfig
 from ..reflection.resolver import resolve_class
+from ..config.app_config import get_app_config
 
 
 logger = logging.getLogger(__name__)
@@ -11,12 +12,9 @@ logger = logging.getLogger(__name__)
 def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *, app_config: AppConfig | None = None, **kwargs) -> BaseChatModel:
     """ Create a chat model instance from the config. """
 
-    config = app_config
+    config = app_config or get_app_config()
     if name is None:
-        if not config.models:
-            raise ValueError("No models defined in config")
         name = config.models[0].name
-
     model_config = config.get_model_config(name)
     if model_config is None:
         raise ValueError(f"Model {name} not found in config") from None
@@ -31,10 +29,9 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             "description",
         },
     )
+    if isinstance(model_config.reasoning, bool | str):
+        model_settings_from_config["reasoning"] = model_config.reasoning
 
-    reasoning = getattr(model_config, "reasoning", None)
-    if isinstance(reasoning, (bool, str)):
-        model_settings_from_config["reasoning"] = reasoning
 
     if thinking_enabled:
         if not model_config.supports_thinking:

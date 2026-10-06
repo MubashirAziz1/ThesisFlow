@@ -23,3 +23,9 @@ models:
       extra_body:
         thinking:
           type: disabled
+
+lead-agent:
+  model_name: doubao-seed-1.8
+  is_plan_mode: False
+  thinking_enabled: false
+  reasoning_effort: low 
