@@ -4,8 +4,11 @@ from fastapi import Request
 import logging
 
 from langchain_core.runnables import RunnableConfig
+from langchain.agents import create_agent
 
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
+from ...models.factory import create_chat_model
+from prompt import apply_prompt_template
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +18,6 @@ class LeadAgentAssembly:
     """ The compiled graph plus what it was assembled from. """
 
     graph: Any
-    descriptor: Any
     effective_model: str | None = None
 
 def _get_runtime_config(config: RunnableConfig) -> dict:
@@ -62,65 +64,14 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         }
     )
 
-    system_prompt = apply_prompt_template(
-        subagent_enabled=subagent_enabled,
-        max_concurrent_subagents=max_concurrent_subagents,
-        max_total_subagents=max_total_subagents,
-        agent_name=agent_name,
-        available_skills=available_skills,
-        app_config=resolved_app_config,
-        deferred_names=setup.deferred_names,
-        mcp_routing_hints_section=mcp_routing_hints_section,
-        user_id=resolved_user_id,
-        skill_names=skill_setup.skill_names or None,
-        allowed_subagents=allowed_subagents,
-        subagent_execution_capacity=subagent_execution_capacity,
-        interaction_policy=interaction_policy,
-        memory_enabled=memory_enabled,
-    )
+    chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False)
+    system_prompt = apply_prompt_template()
     graph = create_agent(
         model=chat_model,
-        tools=final_tools,
-        middleware=normalize_middleware_state_schemas(middlewares, mode),
         system_prompt=system_prompt,
-        state_schema=get_thread_state_schema(mode),
-        context_schema=dict,
-    )
-    return _complete_assembly(
-        config=config,
-        graph=graph,
-        namespace="deerflow",
-        agent_name=agent_name or "lead-agent",
-        requested_model=requested_model_name or agent_model_name,
-        effective_model=model_name,
-        model_config=model_config,
-        model_overrides=agent_model_overrides,
-        thinking_enabled=thinking_enabled,
-        reasoning_effort=reasoning_effort,
-        rendered_base_prompt=system_prompt,
-        tools=final_tools,
-        middlewares=middlewares,
-        deferred_names=setup.deferred_names,
-        enabled_skills=enabled_skills,
-        effective_policies={
-            "bootstrap": False,
-            "non_interactive": non_interactive,
-            "plan_mode": is_plan_mode,
-            "subagents": _subagent_release_policy(
-                resolved_app_config,
-                enabled=subagent_enabled,
-                max_concurrent=max_concurrent_subagents,
-                max_total=max_total_subagents,
-                allowed_subagents=allowed_subagents,
-            ),
-            "deferred_tools": {
-                "enabled": resolved_app_config.tool_search.enabled,
-                "catalog_hash": setup.catalog_hash,
-            },
-            "deferred_skills": skill_search_enabled,
-        },
     )
 
+    return LeadAgentAssembly(graph=graph , effective_model=model_name)
 
 def assemble_lead_agent(
     config: RunnableConfig,
