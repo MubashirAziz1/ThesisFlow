@@ -7,7 +7,7 @@ from typing import cast
 from collections.abc import Callable
 from fastapi import HTTPException, Request
 
-from packages.harness.thesisflow.runtime import RunManager
+from packages.harness.thesisflow.runtime.runs.manager import RunManager
 
 def _require(attr: str, label: str) -> Callable[[Request], T]:
     """Create a FastAPI dependency that returns ``app.state.<attr>`` or 503."""

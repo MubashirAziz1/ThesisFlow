@@ -23,6 +23,7 @@ from packages.harness.thesisflow.utils.thread_id import validate_thread_id
 from packages.harness.thesisflow.runtime.stream_modes import normalize_stream_modes
 from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
+from packages.harness.thesisflow.runtime.runs.worker import run_agent
 from packages.harness.thesisflow.config import get_app_config
 from app.gateway.deps import get_run_manager
 
@@ -133,10 +134,6 @@ async def start_run(
                 agent_factory=agent_factory,
                 graph_input=graph_input,
                 config=config,
-                stream_modes=stream_modes,
-                stream_subgraphs=body.stream_subgraphs,
-                interrupt_before=body.interrupt_before,
-                interrupt_after=body.interrupt_after,
                 )
 
     try:

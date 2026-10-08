@@ -19,6 +19,11 @@ class LeadAgentAssembly:
 
     graph: Any
     effective_model: str | None = None
+def unwrap_agent_graph(agent_result: Any) -> Any:
+    """ Unwrap a lead assembly, leaving any other factory result untouched. """
+    
+    return agent_result.graph if isinstance(agent_result, LeadAgentAssembly) else agent_result
+
 
 def _get_runtime_config(config: RunnableConfig) -> dict:
 

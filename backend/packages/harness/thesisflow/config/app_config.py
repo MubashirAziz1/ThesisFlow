@@ -61,7 +61,7 @@ class AppConfig(BaseModel):
         """ Resolve the config file path. """
 
         try: 
-            project_config = existing_project_file(("config.yaml"))
+            project_config = existing_project_file(("config.yaml",))
             if project_config is not None:
                 return project_config
         except:          
@@ -106,7 +106,7 @@ def get_app_config() -> AppConfig:
 
     if _app_config is None:
         resolved_path = AppConfig.resolve_config_path()
-        _load_app_config(str(resolved_path))
+        _load_app_config(resolved_path)
 
     return _app_config
 

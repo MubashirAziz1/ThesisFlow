@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from app.gateway.routers import run_thread
 from packages.harness.thesisflow.config.app_config import get_app_config
+from .deps import langgraph_runtime
 
 
 # Default logging; lifespan overrides from config.yaml log_level.
@@ -22,15 +23,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("ThesisFlow- Material Scientist Assistant - Server Starting")
     try:
-        application_config = get_app_config()
-        app.state.app_config = application_config
-        logger.info("Shared App Configuration loaded Successfully.")
+        startup_config = get_app_config()
+        logger.info(f"Startup configuration loaded: {startup_config}")
 
     except Exception as e:
         error_msg = f"Failed to load shared app_configuration during startup: {e}"
         logger.exception(error_msg)
         raise RuntimeError(error_msg) from e
     
+    async with langgraph_runtime(app, startup_config):
+
+
+
     logger.info("Ready to accept requests")
 
     yield

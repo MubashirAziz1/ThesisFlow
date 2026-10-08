@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from packages.harness.thesisflow.run_time.stream_modes import RunStreamMode
+from packages.harness.thesisflow.runtime.stream_modes import RunStreamMode
 
 class RunCreateRequest(BaseModel):
     """Validated run request used by both HTTP and internal launch paths."""
