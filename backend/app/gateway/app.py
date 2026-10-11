@@ -32,12 +32,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         raise RuntimeError(error_msg) from e
     
     async with langgraph_runtime(app, startup_config):
-
-
-
-    logger.info("Ready to accept requests")
-
-    yield
+        logger.info("Ready to accept requests")
+        yield
 
     # Shutdown
     logger.info("Server shutting down")

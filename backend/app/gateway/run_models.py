@@ -17,4 +17,8 @@ class RunCreateRequest(BaseModel):
     checkpoint_id: str | None = Field(default=None, description="Resume from checkpoint")
     checkpoint: dict[str, Any] | None = Field(default=None, description="Full checkpoint object")
     stream_mode: list[RunStreamMode] | RunStreamMode | None = Field(default=None, description="Supported stream mode(s)")
+    on_disconnect: Literal["cancel", "continue"] = Field(
+        default="cancel",
+        description="What to do with the run when the client disconnects",
+    )
     

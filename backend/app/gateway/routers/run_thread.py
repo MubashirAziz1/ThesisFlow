@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from app.gateway.run_models import RunCreateRequest
+from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.utils.thread_id import ThreadId
 from app.gateway.services import start_run
 
@@ -24,6 +25,19 @@ class RunResponse(BaseModel):
     multitask_strategy: str = "reject"
     created_at: str = ""
     updated_at: str = ""
+
+
+def _record_to_response(record: RunRecord) -> RunResponse:
+    """Map an in-memory run record onto the public run response."""
+
+    return RunResponse(
+        run_id=record.run_id,
+        thread_id=record.thread_id,
+        assistant_id=record.assistant_id,
+        status=record.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
 
 
 @router.post("/{thread_id}/runs", response_model=RunResponse)

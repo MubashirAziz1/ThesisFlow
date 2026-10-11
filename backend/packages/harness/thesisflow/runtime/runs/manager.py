@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 import uuid
 import asyncio
 
@@ -26,7 +27,11 @@ class RunRecord:
     on_disconnect: DisconnectMode
     created_at: str = ""
     updated_at: str = ""
+    abort_action: str = "interrupt"
+    abort_event: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     model_name: str | None = None
+    task: asyncio.Task | None = field(default=None, repr=False)
+    
 
 class RunManager:
     """  In-memory run registry with optional persistent RunStore backing. """
@@ -34,9 +39,20 @@ class RunManager:
     def __init__(self) -> None:
         self._runs: dict[str, RunRecord] = {}
         self._lock = asyncio.Lock()
+        self._heartbeat_task: asyncio.Task | None = None
+        self._heartbeat_stop: asyncio.Event | None = None
+        self._orphan_recovery_task: asyncio.Task[None] | None = None
+        self._run_ownership_config = None
+        self._worker_id = f"local-{os.getpid()}"
 
-
-
+    @property
+    def heartbeat_enabled(self) -> bool:
+        """Return ``True`` when the heartbeat background task should run."""
+        if self._run_ownership_config is None:
+            return False
+        logger.warning("_run_ownership_config is accidentally becomes Not None")
+        return False
+    
     async def create_or_reject(
         self,
         thread_id: str,
@@ -53,7 +69,6 @@ class RunManager:
             on_disconnect=on_disconnect,
             model_name=model_name,
         )
-
 
     async def _admit_thread_operation(
         self,
@@ -80,15 +95,71 @@ class RunManager:
         )
 
         async with self._lock:
-
             self._runs[run_id] = record
-
 
         logger.info("Run created: run_id=%s thread_id=%s", run_id, thread_id)
         return record
 
+
+    async def start_heartbeat(self) -> None:
+        """ Start the background lease-renewal task. """
+
+        if not self.heartbeat_enabled:
+            return
+        if self._heartbeat_task is not None and not self._heartbeat_task.done():
+            return
+        self._heartbeat_stop = asyncio.Event()
+        task = asyncio.create_task(self._heartbeat_loop())
+        task.set_name("deerflow-run-lease-heartbeat")
+        self._heartbeat_task = task
+        logger.info("Run lease heartbeat started for worker %s", self._worker_id)
+
+    async def stop_heartbeat(self, *, timeout: float = 5.0) -> None:
+        """Stop the background heartbeat task within ``timeout`` seconds."""
+
+        was_running = self._heartbeat_task is not None
+        if self._heartbeat_stop is not None:
+            self._heartbeat_stop.set()
+        if self._heartbeat_task is not None and not self._heartbeat_task.done():
+            _, pending = await asyncio.wait(
+                (self._heartbeat_task,),
+                timeout=max(0.0, timeout),
+            )
+            if pending:
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+        self._heartbeat_task = None
+        self._heartbeat_stop = None
+        if was_running:
+            logger.info("Run lease heartbeat stopped for worker %s", self._worker_id)
+
+    async def _drain_orphan_recovery_task(self, *, timeout: float) -> None:
+        """Boundedly await the supervised recovery pass during shutdown."""
+        task = self._orphan_recovery_task
+        if task is None or task.done():
+            return
+        _, pending = await asyncio.wait((task,), timeout=max(0.0, timeout))
+        if pending:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            logger.warning(
+                "Orphan recovery drain exceeded %.1fs on shutdown; cancelled the active pass",
+                timeout,
+            )
+
+    async def _persist_status(self, record: RunRecord, status: RunStatus) -> bool:
+        """Store a terminal status on the in-memory run record."""
+
+        record.status = status
+        record.updated_at = _now_iso()
+        return True
+
     async def shutdown(self, *, timeout: float = 5.0) -> None:
         """ Cancel and bounded-await all in-flight runs on process shutdown. """
+
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
 
@@ -97,9 +168,7 @@ class RunManager:
             for record in inflight:
                 record.abort_action = "interrupt"
                 record.abort_event.set()
-                record.task.cancel()  # type: ignore[union-attr]  # filtered above
-                # Status is decided AFTER the drain (below), not here: a run that
-                # completes on its own during the drain must keep its real status.
+                record.task.cancel() 
 
         await self.stop_heartbeat(timeout=max(0.0, deadline - loop.time()))
 
@@ -110,9 +179,6 @@ class RunManager:
         tasks = [record.task for record in inflight]
         _, pending = await asyncio.wait(tasks, timeout=max(0.0, deadline - loop.time()))
 
-        # Only mark/persist ``interrupted`` for runs that did not settle on their
-        # own (still pending after the timeout, or ended cancelled). A run that
-        # finished normally during the drain keeps the status it set for itself.
         to_persist: list[RunRecord] = []
         async with self._lock:
             for record in inflight:
@@ -127,9 +193,6 @@ class RunManager:
                     record.updated_at = _now_iso()
                 to_persist.append(record)
 
-        # Bound the trailing status persistence within the remaining budget so a
-        # slow store (``_call_store_with_retry`` can back off under DB pressure)
-        # cannot push shutdown past ``timeout``.
         if to_persist:
             remaining = deadline - loop.time()
             if remaining <= 0:
@@ -143,10 +206,6 @@ class RunManager:
                 except TimeoutError:
                     logger.warning("Run drain status persistence exceeded the %.1fs budget; %d record(s) may not be persisted", timeout, len(to_persist))
                 else:
-                    # ``_persist_status`` is best-effort: it catches and logs its
-                    # own failures, returning ``False``. Inspect the aggregate so a
-                    # partial failure is surfaced at shutdown level (with the
-                    # run_id) instead of being silently swallowed by the gather.
                     for record, result in zip(to_persist, results):
                         if isinstance(result, Exception):
                             logger.warning("Unexpected error persisting interrupted status for run %s during shutdown: %r", record.run_id, result)
@@ -159,5 +218,8 @@ class RunManager:
         await self._drain_orphan_recovery_task(timeout=max(0.0, deadline - loop.time()))
 
 
-    
+
+
+
+
 
