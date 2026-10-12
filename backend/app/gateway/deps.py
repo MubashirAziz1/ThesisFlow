@@ -13,20 +13,13 @@ from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 
 from packages.harness.thesisflow.runtime.runs.manager import RunManager
-from packages.harness.thesisflow.config.app_config import AppConfig
+from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
+from packages.harness.thesisflow.runtime.runs.worker import RunContext
 
 
 @asynccontextmanager
 async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGenerator[None, None]:
-    """Bootstrap and tear down all LangGraph runtime singletons.
-
-    ``startup_config`` is the snapshot taken once during lifespan startup.
-    In-flight runs are drained before the exit stack releases anything
-    entered above this yield.
-    """
-
-    if startup_config is None:
-        raise RuntimeError("langgraph_runtime() requires a startup AppConfig")
+    """ Bootstrap and tear down all LangGraph runtime singletons. """
 
     async with AsyncExitStack() as stack:
         config = startup_config
@@ -65,3 +58,7 @@ def _require(attr: str, label: str) -> Callable[[Request], T]:
 
 
 get_run_manager: Callable[[Request], RunManager] = _require("run_manager", "Run manager")
+
+def get_run_context(request: Request) -> RunContext:
+    """ Build a :class:`RunContext` from ``app.state`` singletons. """
+    return RunContext(app_config=get_app_config())

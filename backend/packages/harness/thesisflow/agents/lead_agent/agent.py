@@ -8,7 +8,7 @@ from langchain.agents import create_agent
 
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
 from ...models.factory import create_chat_model
-from prompt import apply_prompt_template
+from .prompt import apply_prompt_template
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,16 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         }
     )
 
-    chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False)
+    model_kwargs: dict[str, Any] = {}
+    # This provider rejects reasoning_effort when thinking is disabled.
+    if thinking_enabled and reasoning_effort and isinstance(reasoning_effort, str):
+        model_kwargs["reasoning_effort"] = reasoning_effort
+    chat_model = create_chat_model(
+        name=model_name,
+        thinking_enabled=bool(thinking_enabled),
+        app_config=resolved_app_config,
+        **model_kwargs,
+    )
     system_prompt = apply_prompt_template()
     graph = create_agent(
         model=chat_model,
@@ -80,10 +89,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
 def assemble_lead_agent(
     config: RunnableConfig,
-    request: Request,
 ) -> LeadAgentAssembly:
     """ Return the compiled lead graph together with its assembly descriptor. """
 
-    runtime_app_config = request.app.state.app_config
+    runtime_app_config = get_app_config()
     return _assemble_lead_agent(config, app_config=runtime_app_config)
   

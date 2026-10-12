@@ -7,8 +7,7 @@ import os
 from dataclasses import dataclass, field
 import uuid
 import asyncio
-
-
+from enum import StrEnum
 
 from .schemas import DisconnectMode, RunStatus
 from packages.harness.thesisflow.utils.time import now_iso as _now_iso
@@ -25,12 +24,21 @@ class RunRecord:
     assistant_id: str | None
     status: RunStatus
     on_disconnect: DisconnectMode
+    error: str | None = None
+    stop_reason: str | None = None
     created_at: str = ""
     updated_at: str = ""
     abort_action: str = "interrupt"
+    start_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     abort_event: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     model_name: str | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
+
+class RunStartOutcome(StrEnum):
+    """Result of the pending-to-running startup barrier."""
+
+    started = "started"
+    cancelled = "cancelled"
     
 
 class RunManager:
@@ -99,6 +107,32 @@ class RunManager:
 
         logger.info("Run created: run_id=%s thread_id=%s", run_id, thread_id)
         return record
+
+    async def try_start(self, run_id: str) -> RunStartOutcome:
+        """Transition an uncancelled pending run to running before building the agent."""
+        
+        async with self._lock:
+            record = self._runs.get(run_id)
+        if record is None:
+            raise Exception(f"Unknown run: {run_id}")
+
+        async with record.start_lock:
+            async with self._lock:
+                if record.abort_event.is_set() or record.status != RunStatus.pending:
+                    return RunStartOutcome.cancelled
+
+            async with self._lock:
+                if record.abort_event.is_set() or record.status != RunStatus.pending:
+                    restore_status = record.status
+                    restore_error = record.error
+                    restore_stop_reason = record.stop_reason
+                else:
+                    record.status = RunStatus.running
+                    record.updated_at = _now_iso()
+                    logger.info("Run %s -> %s", run_id, RunStatus.running.value)
+                    return RunStartOutcome.started
+
+            return RunStartOutcome.cancelled
 
 
     async def start_heartbeat(self) -> None:

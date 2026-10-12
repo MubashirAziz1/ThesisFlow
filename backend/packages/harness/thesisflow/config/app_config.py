@@ -54,18 +54,25 @@ class AppConfig(BaseModel):
                 resolved_path,
             )
 
+        result._models_by_name = {model.name: model for model in result.models}
         return result
 
     @classmethod
-    def resolve_config_path(cls) -> Path:
+    def resolve_config_path(cls, config_path: str | Path | None = None) -> Path:
         """ Resolve the config file path. """
 
-        try: 
-            project_config = existing_project_file(("config.yaml",))
-            if project_config is not None:
-                return project_config
-        except:          
-            raise FileNotFoundError("`config.yaml` file not found in the project root or legacy backend/repository root locations")
+        if config_path is not None:
+            candidate = Path(config_path)
+            if candidate.is_file():
+                return candidate
+            raise FileNotFoundError(f"`config.yaml` file not found at {candidate}")
+
+        project_config = existing_project_file(("config.yaml",))
+        if project_config is None:
+            raise FileNotFoundError(
+                "`config.yaml` file not found in the project root or legacy backend/repository root locations"
+            )
+        return project_config
     
     @classmethod
     def resolve_env_variables(cls, config: Any) -> Any:
@@ -92,21 +99,19 @@ class AppConfig(BaseModel):
 
 _app_config: AppConfig | None = None
 
-def _load_app_config(config_path: str | None = None) -> AppConfig:
+def _load_app_config(config_path: Path) -> AppConfig:
     """ Load config from disk and refresh cache metadata. """
 
-    resolved_path = config_path
-    raw = resolved_path.read_bytes()
-    _app_config = AppConfig._from_yaml_text(raw.decode("utf-8"), resolved_path)
-
-    return _app_config
+    raw = config_path.read_bytes()
+    return AppConfig._from_yaml_text(raw.decode("utf-8"), config_path)
 
 def get_app_config() -> AppConfig:
     """ Get the DeerFlow config instance. """
 
+    global _app_config
     if _app_config is None:
         resolved_path = AppConfig.resolve_config_path()
-        _load_app_config(resolved_path)
+        _app_config = _load_app_config(resolved_path)
 
     return _app_config
 

@@ -4,6 +4,7 @@ from typing import Any
 from dataclasses import field, dataclass
 import logging
 from langchain_core.runnables import RunnableConfig
+from fastapi import Request
 
 
 from .manager import RunManager, RunRecord

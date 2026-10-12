@@ -25,7 +25,7 @@ from packages.harness.thesisflow.runtime.runs.schemas import DisconnectMode
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.runtime.runs.worker import run_agent
 from packages.harness.thesisflow.config import get_app_config
-from app.gateway.deps import get_run_manager
+from app.gateway.deps import get_run_manager, get_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,8 @@ async def start_run(
 
     stream_modes = normalize_stream_modes(body.stream_mode)
     run_mgr = get_run_manager(request) 
+    run_ctx = get_run_context(request)
+
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
     app_config = get_app_config()
@@ -130,7 +132,8 @@ async def start_run(
 
         await run_agent(
                 run_mgr,
-                record,   
+                record,
+                ctx=run_ctx,    
                 agent_factory=agent_factory,
                 graph_input=graph_input,
                 config=config,
