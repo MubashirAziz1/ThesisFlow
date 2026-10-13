@@ -33,10 +33,9 @@ type StreamItem = StreamEvent
 class StreamBridge(abc.ABC):
     """Abstract base for stream bridges."""
 
-    supports_cross_process: bool = False
-
     def __init__(self, *, heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL_SECONDS) -> None:
         self._heartbeat_interval = heartbeat_interval
+        
 
     @property
     def heartbeat_interval(self) -> float:

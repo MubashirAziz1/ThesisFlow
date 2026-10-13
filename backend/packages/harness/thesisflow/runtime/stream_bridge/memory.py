@@ -49,51 +49,16 @@ class MemoryStreamBridge(StreamBridge):
 
     @staticmethod
     def _parse_event_seq(event_id: str) -> int | None:
-        """Extract the per-run sequence number from a ``{ts}-{seq}`` event id.
-
-        ``seq`` (assigned by :meth:`_next_id`) increases by one per published
-        event, so it equals the event's absolute offset within the run. Returns
-        ``None`` for ids that do not match the expected format.
-        """
+        """ Extract the per-run sequence number from a ``{ts}-{seq}`` event id. """
         match = _MEMORY_STREAM_ID_RE.fullmatch(event_id)
         if match is None:
             return None
         return int(match.group(1))
 
-    @staticmethod
-    def _make_gap(stream: _RunStream, requested_event_id: str | None) -> StreamGap:
-        return StreamGap(
-            requested_event_id=requested_event_id,
-            earliest_available_event_id=stream.events[0].id if stream.events else None,
-            latest_available_event_id=stream.events[-1].id if stream.events else None,
-        )
 
     def _resolve_start_offset(self, stream: _RunStream, last_event_id: str | None) -> int | StreamGap:
         if last_event_id is None:
             return stream.start_offset
-
-        # Event ids embed a per-run, monotonically increasing ``seq`` that equals
-        # the event's absolute offset, so locate the event by arithmetic in O(1)
-        # rather than scanning the retained buffer. Retained ids are verified at
-        # the computed index. Once an id is below the retained watermark there is
-        # nothing left to verify its timestamp against, so even a numeric foreign
-        # id takes the conservative gap path; reloading durable state is safer
-        # than silently claiming a complete replay. Unknown ids at or above the
-        # watermark keep the legacy replay-from-earliest behavior.
-        seq = self._parse_event_seq(last_event_id)
-        if seq is not None:
-            if seq < stream.start_offset:
-                return self._make_gap(stream, last_event_id)
-            local_index = seq - stream.start_offset
-            if 0 <= local_index < len(stream.events) and stream.events[local_index].id == last_event_id:
-                return stream.start_offset + local_index + 1
-
-        if stream.events:
-            logger.warning(
-                "last_event_id=%s not found in retained buffer; replaying from earliest retained event",
-                last_event_id,
-            )
-        return stream.start_offset
 
     async def stream_exists(self, run_id: str) -> bool:
         """Return whether the in-process event log still has data for *run_id*."""
@@ -125,16 +90,12 @@ class MemoryStreamBridge(StreamBridge):
         last_event_id: str | None = None,
         heartbeat_interval: float | None = None,
     ) -> AsyncIterator[StreamItem]:
-        heartbeat_interval = self._resolve_heartbeat_interval(heartbeat_interval)
+        heartbeat_interval = heartbeat_interval
         stream = self._get_or_create_stream(run_id)
         async with stream.condition:
             start = self._resolve_start_offset(stream, last_event_id)
-            if isinstance(start, StreamGap):
-                gap = start
-                next_offset = stream.start_offset
-            else:
-                gap = None
-                next_offset = start
+            gap = None
+            next_offset = start
 
         if gap is not None:
             yield gap

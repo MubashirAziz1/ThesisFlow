@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from packages.harness.thesisflow.runtime.runs.manager import RunManager, StreamBridge
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
 from packages.harness.thesisflow.runtime.runs.worker import RunContext
+from packages.harness.thesisflow.runtime.stream_bridge.async_provider import make_stream_bridge
 
 
 @asynccontextmanager
@@ -23,6 +24,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
     async with AsyncExitStack() as stack:
         config = startup_config
+
+        app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
         app.state.app_config = config
         app.state.run_manager = RunManager()
 

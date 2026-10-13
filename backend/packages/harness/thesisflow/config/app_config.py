@@ -25,6 +25,13 @@ class AppConfig(BaseModel):
         description= "Logging level for app modules: debug, info, warning, or error."
     )
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
+    stream_bridge: StreamBridgeConfig | None = Field(
+        default=None,
+        description=format_field_description(
+            "stream_bridge",
+            field_doc="Stream bridge connecting agent workers to SSE endpoints.",
+        ),
+    )
     lead_agent: LeadAgentConfig = Field(
         default_factory=LeadAgentConfig,
         alias="lead-agent",
