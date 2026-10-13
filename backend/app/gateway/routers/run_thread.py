@@ -9,7 +9,7 @@ from starlette.background import BackgroundTask
 from app.gateway.run_models import RunCreateRequest
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.utils.thread_id import ThreadId
-from app.gateway.services import start_run
+from app.gateway.deps import get_run_manager, get_stream_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -55,54 +55,82 @@ async def create_run(
     return _record_to_response(record)
 
 
-# @router.post("/{thread_id}/runs/stream")
-# async def stream_run(
-#     thread_id: ThreadId,
-#     body: RunCreateRequest,
-#     request: Request,
-#     ) -> StreamingResponse:
-#     """Create a run and stream events via SSE.
+@router.post("/{thread_id}/runs/stream")
+async def stream_run(
+    thread_id: ThreadId,
+    body: RunCreateRequest,
+    request: Request,
+) -> StreamingResponse:
+    """Create a run and stream events via SSE. """
 
-#     The response includes a ``Content-Location`` header with the run's
-#     resource URL, matching the LangGraph Platform protocol.  The
-#     ``useStream`` React hook uses this to extract run metadata.
-#     """
-#     bridge = get_stream_bridge(request)
-#     run_mgr = get_run_manager(request)
-#     record = await start_run(
-#         body,
-#         thread_id,
-#         request,
-#         idempotency_key=_scope_http_run_idempotency_key(request, thread_id, idempotency_key),
-#     )
+    bridge = get_stream_bridge(request)
+    run_mgr = get_run_manager(request)
+    record = await start_run(
+        body,
+        thread_id,
+        request,
+    )
 
-#     # Same shape join already rejects: a reused store-only handle on a
-#     # process-local bridge has no owner stream. Subscribing would create an
-#     # empty log and wait forever. Terminal reuse still goes through
-#     # sse_consumer with emit_gap_on_missing_stream so a missing stream emits
-#     # gap rather than a bare end. First-time creates keep the default `end`.
-#     if record.store_only and not bridge.supports_cross_process and record.status in (RunStatus.pending, RunStatus.running):
-#         raise HTTPException(
-#             status_code=409,
-#             detail=f"Run {record.run_id} is not active on this worker and cannot be streamed",
-#         )
+    return StreamingResponse(
+        sse_consumer(
+            bridge,
+            record,
+            request,
+            run_mgr,
+        ),
+        media_type="text/event-stream",
+        headers=sse_response_headers(content_location=f"/api/threads/{thread_id}/runs/{record.run_id}"),
+    )
 
-#     return StreamingResponse(
-#         sse_consumer(
-#             bridge,
-#             record,
-#             request,
-#             run_mgr,
-#             emit_gap_on_missing_stream=record.idempotency_reused,
-#         ),
-#         media_type="text/event-stream",
-#         headers={
-#             "Cache-Control": "no-cache",
-#             "Connection": "keep-alive",
-#             "X-Accel-Buffering": "no",
-#             # LangGraph Platform includes run metadata in this header.
-#             # The SDK uses a greedy regex to extract the run id from this path,
-#             # so it must point at the canonical run resource without extra suffixes.
-#             "Content-Location": f"/api/threads/{thread_id}/runs/{record.run_id}",
-#         },
-#     )
+@router.post("/{thread_id}/runs/wait", response_model=dict)
+async def wait_run(
+    thread_id: ThreadId,
+    body: RunCreateRequest,
+    request: Request,
+) -> dict:
+    """Create a run and block until it completes, returning the final state. """
+
+    bridge = get_stream_bridge(request)
+    run_mgr = get_run_manager(request)
+    record = await start_run(
+        body,
+        thread_id,
+        request,
+    )
+
+    # Reused/hydrated records have no local task. Wait on the bridge when this
+    # worker can observe it; otherwise return durable status rather than
+    # serializing whatever checkpoint happens to exist.
+    if getattr(record, "store_only", False) and not getattr(bridge, "supports_cross_process", False):
+        record = await _refresh_store_backed_run(run_mgr, record)
+        return serialize_wait_run_status(record)
+
+    if record.task is not None or getattr(record, "store_only", False):
+        completed = await wait_for_run_completion(bridge, record, request, run_mgr)
+    else:
+        completed = True
+
+    if completed:
+        record = await _refresh_store_backed_run(run_mgr, record)
+        if record.status == RunStatus.error:
+            # A failure before the first checkpoint leaves an earlier answer at
+            # the thread head. Return this run's error, never that old state.
+            return serialize_wait_run_status(record)
+
+    # Idempotent reuse is not bound to a run-specific checkpoint id. The latest
+    # thread head may be a later run, so do not claim it as this run's result.
+    if completed and not reused:
+        try:
+            accessor, config = await abuild_checkpoint_state_accessor(
+                request,
+                thread_id=thread_id,
+                assistant_id=body.assistant_id,
+            )
+            snapshot = await accessor.aget(config)
+            snapshot_config = snapshot.config or {}
+            if snapshot_config.get("configurable", {}).get("checkpoint_id"):
+                return serialize_channel_values_for_api(snapshot.values)
+        except Exception:
+            logger.exception("Failed to fetch final state for run %s", record.run_id)
+
+    return serialize_wait_run_status(record)

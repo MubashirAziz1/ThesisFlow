@@ -64,11 +64,9 @@ async def run_agent(
         runnable_config = RunnableConfig(**config)
         agent = _agent_graph(agent_factory(config=runnable_config))
         result = await agent.ainvoke(graph_input, config=runnable_config)
-        await run_manager.set_status_if_not_cancelled(run_id, RunStatus.success)
         return result
     except Exception as exc:
-        await run_manager.set_status_if_not_cancelled(run_id, RunStatus.error, error=str(exc))
-        raise
+        raise Exception(f"Error occurs before running agent: {exc}") from exc
 
 
 

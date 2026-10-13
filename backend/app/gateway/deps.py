@@ -12,7 +12,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 
-from packages.harness.thesisflow.runtime.runs.manager import RunManager
+from packages.harness.thesisflow.runtime.runs.manager import RunManager, StreamBridge
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
 from packages.harness.thesisflow.runtime.runs.worker import RunContext
 
@@ -58,6 +58,8 @@ def _require(attr: str, label: str) -> Callable[[Request], T]:
 
 
 get_run_manager: Callable[[Request], RunManager] = _require("run_manager", "Run manager")
+get_stream_bridge: Callable[[Request], StreamBridge] = _require("stream_bridge", "Stream bridge")
+
 
 def get_run_context(request: Request) -> RunContext:
     """ Build a :class:`RunContext` from ``app.state`` singletons. """
