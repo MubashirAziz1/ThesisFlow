@@ -39,3 +39,9 @@ def normalize_stream_modes(raw: list[str] | str | None) -> list[str]:
         raise UnsupportedStreamModeError(unsupported)
     return modes
 
+
+def to_langgraph_stream_modes(raw: list[str] | str | None) -> list[str]:
+    """Map public run modes to ``graph.astream`` modes without silent fallback."""
+    modes = normalize_stream_modes(raw)
+    mapped = ["messages" if mode == "messages-tuple" else mode for mode in modes]
+    return list(dict.fromkeys(mapped))
