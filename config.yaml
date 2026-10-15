@@ -3,29 +3,36 @@
 log_level: info
 
 models:
-  - name: doubao-seed-1.8
-    display_name: Doubao-Seed-1.8
-    use: deerflow.models.patched_deepseek:PatchedChatDeepSeek
-    model: doubao-seed-1-8-251228
-    api_base: https://ark.cn-beijing.volces.com/api/v3
+  - name: dola-seed-2-1-turbo
+    display_name: Dola Seed 2.1 Turbo
+    use: langchain_openai:ChatOpenAI
+    model: dola-seed-2-1-turbo-260628
     api_key: $VOLCENGINE_API_KEY
-    timeout: 600.0
+    base_url: https://ark.ap-southeast.bytepluses.com/api/v3
+    use_responses_api: true
+    output_version: responses/v1
+    request_timeout: 600.0
     max_retries: 2
-    context_window: 262144     # Total prompt + completion capacity
     supports_thinking: true
-    supports_vision: true
-    supports_reasoning_effort: true
+    supports_vision: false
+
     when_thinking_enabled:
       extra_body:
         thinking:
           type: enabled
+
     when_thinking_disabled:
       extra_body:
         thinking:
           type: disabled
 
 lead-agent:
-  model_name: doubao-seed-1.8
+  model_name: dola-seed-2-1-turbo
   is_plan_mode: False
   thinking_enabled: false
   reasoning_effort: low 
+
+
+stream_bridge:
+  type: memory                 # single-process only
+  queue_maxsize: 256           # data events retained per run. 

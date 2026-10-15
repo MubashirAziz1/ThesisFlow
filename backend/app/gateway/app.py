@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("ThesisFlow- Material Scientist Assistant - Server Starting")
     try:
         startup_config = get_app_config()
+        app.state.app_config = startup_config
         logger.info(f"Startup configuration loaded: {startup_config}")
 
     except Exception as e:

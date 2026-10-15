@@ -29,16 +29,9 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         app.state.app_config = config
         app.state.run_manager = RunManager()
 
-        async def _release_runtime_state() -> None:
-            app.state.run_manager = None
-            app.state.app_config = None
-
-        # Unwinds after the finally drain, before any earlier stack resources close.
-        stack.push_async_callback(_release_runtime_state)
+        await app.state.run_manager.start_heartbeat()
 
         try:
-            # Start the lease heartbeat if enabled (multi-worker deployments).
-            await app.state.run_manager.start_heartbeat()
             yield
         finally:
             run_manager = getattr(app.state, "run_manager", None)

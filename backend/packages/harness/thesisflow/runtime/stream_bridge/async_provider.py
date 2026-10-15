@@ -32,7 +32,7 @@ async def make_stream_bridge(app_config: AppConfig | None = None) -> AsyncIterat
     
     config = _resolve_config(app_config)
 
-    if config.type == "memory":
+    if config is None or config.type == "memory":
         from deerflow.runtime.stream_bridge.memory import MemoryStreamBridge
 
         maxsize = config.queue_maxsize if config is not None else 256

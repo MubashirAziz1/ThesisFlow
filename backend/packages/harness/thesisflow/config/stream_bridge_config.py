@@ -44,7 +44,6 @@ class StreamBridgeConfig(BaseModel):
 
 
 # Global configuration instance — None means no stream bridge is configured
-# (falls back to memory with defaults).
 _stream_bridge_config: StreamBridgeConfig | None = None
 
 
