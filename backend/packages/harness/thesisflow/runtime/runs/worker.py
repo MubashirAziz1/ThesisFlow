@@ -7,9 +7,11 @@ from langchain_core.runnables import RunnableConfig
 from fastapi import Request
 
 
-from .manager import RunManager, RunRecord
+from .manager import RunManager, RunRecord, RunStartOutcome
+from ..stream_bridge import StreamBridge
 from ...config.app_config import AppConfig
 from .schemas import RunStatus
+from ...extensions.notify import lead_task_id
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +47,37 @@ def _agent_graph(agent_result: Any) -> Any:
 
 
 async def run_agent(
+    bridge: StreamBridge,
     run_manager: RunManager,
-        record: RunRecord,
-        *,
-        ctx: RunContext,
-        agent_factory: Any,
-        graph_input: dict,
-        config: dict,
+    record: RunRecord,
+    *,
+    ctx: RunContext,
+    agent_factory: Any,
+    graph_input: dict,
+    config: dict,
 )-> None:
     
     run_id = record.run_id
+    thread_id = record.thread_id
 
-    start_outcome = await run_manager.try_start(run_id)
-    if start_outcome.value != "started":
-        return None
+    started = False
 
     try:
+        normalized_stream_modes = normalize_stream_modes(stream_modes)
+        requested_modes: set[str] = set(normalized_stream_modes)
+
+        start_outcome = await run_manager.try_start(run_id)
+        started = True
+
+        await bridge.publish(
+            run_id,
+            "metadata",
+            {
+                "run_id": run_id,
+                "thread_id": thread_id,
+            },
+        )
+    
         runnable_config = RunnableConfig(**config)
         agent = _agent_graph(agent_factory(config=runnable_config))
         result = await agent.ainvoke(graph_input, config=runnable_config)

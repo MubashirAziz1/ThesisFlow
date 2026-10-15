@@ -132,6 +132,7 @@ async def start_run(
     async def agent_worker(record: RunRecord) -> None:
 
         await run_agent(
+                bridge,
                 run_mgr,
                 record,
                 ctx=run_ctx,    
@@ -144,7 +145,7 @@ async def start_run(
         record = await run_mgr.create_or_reject(
                 thread_id,
                 body.assistant_id,
-                on_disconnect=disconnect,
+                on_disconnect=disconsnect,
                 model_name=model_name,
             )
         worker = agent_worker(record)
