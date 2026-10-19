@@ -12,7 +12,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 
-from packages.harness.thesisflow.runtime.runs.manager import RunManager, StreamBridge
+from packages.harness.thesisflow.runtime.runs.manager import RunManager
+from packages.harness.thesisflow.runtime.stream_bridge import StreamBridge
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
 from packages.harness.thesisflow.runtime.runs.worker import RunContext
 from packages.harness.thesisflow.runtime.stream_bridge.async_provider import make_stream_bridge

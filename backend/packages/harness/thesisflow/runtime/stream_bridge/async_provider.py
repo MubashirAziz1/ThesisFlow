@@ -33,7 +33,7 @@ async def make_stream_bridge(app_config: AppConfig | None = None) -> AsyncIterat
     config = _resolve_config(app_config)
 
     if config is None or config.type == "memory":
-        from deerflow.runtime.stream_bridge.memory import MemoryStreamBridge
+        from .memory import MemoryStreamBridge
 
         maxsize = config.queue_maxsize if config is not None else 256
         heartbeat_interval = config.heartbeat_interval_seconds if config is not None else DEFAULT_HEARTBEAT_INTERVAL_SECONDS

@@ -27,6 +27,12 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             "name",
             "display_name",
             "description",
+            "supports_thinking",
+            "supports_reasoning_effort",
+            "when_thinking_enabled",
+            "when_thinking_disabled",
+            "supports_vision",
+            "context_window",
         },
     )
     if isinstance(model_config.reasoning, bool | str):

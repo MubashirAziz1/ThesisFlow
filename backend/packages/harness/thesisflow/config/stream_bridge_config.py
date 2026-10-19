@@ -4,8 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
-from deerflow.config._boolean_guards import reject_boolean
-
 StreamBridgeType = Literal["memory", "redis"]
 DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 15.0
 MAX_HEARTBEAT_INTERVAL_SECONDS = 86_400.0

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import Any
 from dataclasses import field, dataclass
 import logging
@@ -10,9 +11,9 @@ from .manager import RunManager, RunRecord, RunStartOutcome
 from ..stream_bridge import StreamBridge
 from ...config.app_config import AppConfig
 from .schemas import RunStatus
-from ...extensions.notify import lead_task_id
-from ...serialization import serialize
 from .stream_cleanup import close_agent_stream
+from ..stream_modes import normalize_stream_modes, to_langgraph_stream_modes
+from ..serialization import serialize
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +132,9 @@ async def run_agent(
                             else:
                                 logger.debug("Could not close agent stream for run %s", run_id, exc_info=True)
                     return
-        
-        await _stream_once(graph_input, initial_runnable_config)
+            except Exception as exc:
+                logger.exception("Run %s failed: %s", run_id, exc)
+        await _stream_once(graph_input, runnable_config)
 
     except Exception as exc:
         error_msg = f"{exc}"

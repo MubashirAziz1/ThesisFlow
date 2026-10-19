@@ -10,6 +10,7 @@ from app.gateway.run_models import RunCreateRequest
 from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.utils.thread_id import ThreadId
 from app.gateway.deps import get_run_manager, get_stream_bridge
+from app.gateway.services import start_run, sse_consumer
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,6 @@ async def stream_run(
             run_mgr,
         ),
         media_type="text/event-stream",
-        headers=sse_response_headers(content_location=f"/api/threads/{thread_id}/runs/{record.run_id}"),
     )
 
 @router.post("/{thread_id}/runs/wait", response_model=dict)

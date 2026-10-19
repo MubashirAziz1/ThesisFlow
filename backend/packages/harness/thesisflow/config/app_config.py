@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from ..config.agent_config import LeadAgentConfig
 from ..config.model_config import ModelConfig
 from ..config.runtime_paths import existing_project_file
+from ..config.stream_bridge_config import StreamBridgeConfig
 
 load_dotenv()
 
@@ -27,10 +28,7 @@ class AppConfig(BaseModel):
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
     stream_bridge: StreamBridgeConfig | None = Field(
         default=None,
-        description=format_field_description(
-            "stream_bridge",
-            field_doc="Stream bridge connecting agent workers to SSE endpoints.",
-        ),
+        description= "Stream bridge connecting agent workers to SSE endpoints."
     )
     lead_agent: LeadAgentConfig = Field(
         default_factory=LeadAgentConfig,

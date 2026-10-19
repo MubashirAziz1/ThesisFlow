@@ -12,6 +12,7 @@ import logging
 from dataclasses import replace
 from typing import Any
 import re
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -26,11 +27,22 @@ from packages.harness.thesisflow.runtime.runs.manager import RunRecord
 from packages.harness.thesisflow.runtime.runs.worker import run_agent
 from packages.harness.thesisflow.config import get_app_config
 from app.gateway.deps import get_run_manager, get_run_context, get_stream_bridge
-
+from packages.harness.thesisflow.runtime.stream_bridge import HEARTBEAT_SENTINEL, END_SENTINEL
 logger = logging.getLogger(__name__)
 
 _DEFAULT_ASSISTANT_ID = "lead_agent"
 _DEFAULT_RECURSION_LIMIT = 100
+
+
+def format_sse(event: str, data: Any, *, event_id: str | None = None) -> str:
+    """ Format a single SSE frame. """
+    payload = json.dumps(data, default=str, ensure_ascii=False)
+    parts = [f"event: {event}", f"data: {payload}"]
+    if event_id:
+        parts.append(f"id: {event_id}")
+    parts.append("")
+    parts.append("")
+    return "\n".join(parts)
 
 
 def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
@@ -145,7 +157,7 @@ async def start_run(
         record = await run_mgr.create_or_reject(
                 thread_id,
                 body.assistant_id,
-                on_disconnect=disconsnect,
+                on_disconnect=disconnect,
                 model_name=model_name,
             )
         worker = agent_worker(record)
@@ -160,3 +172,40 @@ async def start_run(
         raise
 
     return record   
+
+
+async def sse_consumer(
+    bridge: StreamBridge,
+    record: RunRecord,
+    request: Request,
+    run_mgr: RunManager,
+    *,
+    apply_on_disconnect: bool = True,
+):
+    """ Async generator that yields SSE frames from the bridge. """
+    last_event_id = request.headers.get("Last-Event-ID")
+
+    terminal_emitted = False
+    disconnect_observed = False
+    try:
+        async for entry in bridge.subscribe(record.run_id, last_event_id=last_event_id):
+            if await request.is_disconnected():
+                disconnect_observed = True
+                break
+
+            if entry is HEARTBEAT_SENTINEL:
+                yield ": heartbeat\n\n"
+                continue
+
+            if entry is END_SENTINEL:
+                terminal_emitted = True
+                yield format_sse("end", None, event_id=entry.id or None)
+                return
+
+            yield format_sse(entry.event, entry.data, event_id=entry.id or None)
+
+        if not disconnect_observed:
+            raise RuntimeError("stream bridge subscription ended before a terminal event")
+    except (GeneratorExit, asyncio.CancelledError):
+        disconnect_observed = True
+        raise
