@@ -28,11 +28,11 @@ class UnsupportedStreamModeError(ValueError):
 def normalize_stream_modes(raw: list[str] | str | None) -> list[str]:
     """Normalize and validate public run stream modes."""
     if raw is None:
-        modes = ["values"]
+        modes = ["messages-tuple"]
     elif isinstance(raw, str):
         modes = [raw]
     else:
-        modes = raw or ["values"]
+        modes = raw or ["messages-tuple"]
 
     unsupported = [mode if isinstance(mode, str) else type(mode).__name__ for mode in modes if not isinstance(mode, str) or mode not in SUPPORTED_RUN_STREAM_MODES]
     if unsupported:
