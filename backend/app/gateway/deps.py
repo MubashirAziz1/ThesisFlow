@@ -23,10 +23,13 @@ from packages.harness.thesisflow.runtime.stream_bridge.async_provider import mak
 async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGenerator[None, None]:
     """ Bootstrap and tear down all LangGraph runtime singletons. """
 
+    from packages.harness.thesisflow.runtime.checkpointer.async_provider import make_checkpointer
+
     async with AsyncExitStack() as stack:
         config = startup_config
 
         app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
+        app.state.checkpointer = await stack.enter_async_context(make_checkpointer(config))
         app.state.app_config = config
         app.state.run_manager = RunManager()
 

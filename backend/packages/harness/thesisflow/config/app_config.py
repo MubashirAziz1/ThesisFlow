@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from ..config.agent_config import LeadAgentConfig
+from ..config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
+
 from ..config.model_config import ModelConfig
 from ..config.runtime_paths import existing_project_file
 from ..config.stream_bridge_config import StreamBridgeConfig
@@ -26,15 +28,17 @@ class AppConfig(BaseModel):
         description= "Logging level for app modules: debug, info, warning, or error."
     )
     models: list[ModelConfig] = Field(default_factory=list, description="Available models")
-    stream_bridge: StreamBridgeConfig | None = Field(
-        default=None,
+    stream_bridge: StreamBridgeConfig | None = Field(default=None,
         description= "Stream bridge connecting agent workers to SSE endpoints."
     )
-    lead_agent: LeadAgentConfig = Field(
-        default_factory=LeadAgentConfig,
-        alias="lead-agent",
+
+    lead_agent: LeadAgentConfig = Field(default_factory=LeadAgentConfig, alias="lead-agent",
         description="Lead agent defaults (model name, plan mode, ...)",
     )
+
+    checkpointer: CheckpointerConfig | None = Field(default=None,
+        description="LangGraph state-persistence checkpointer configuration."
+        )
 
     _models_by_name: dict[str, ModelConfig] = PrivateAttr(default_factory=dict)
 
