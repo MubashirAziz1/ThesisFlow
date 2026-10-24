@@ -12,7 +12,6 @@ class CheckpointerConfig(BaseModel):
     type: CheckpointerType = Field(
         description="Checkpointer backend type. "
         "'memory' is in-process only (lost on restart). "
-        "'sqlite' persists to a local file (requires langgraph-checkpoint-sqlite). "
         "'postgres' persists to PostgreSQL (install with deerflow-harness[postgres])."
     )
     connection_string: str | None = Field(

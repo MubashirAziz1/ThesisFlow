@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from ..config.agent_config import LeadAgentConfig
+from ..config.database_config import DatabaseConfig
 from ..config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
 
 from ..config.model_config import ModelConfig
@@ -34,6 +35,10 @@ class AppConfig(BaseModel):
 
     lead_agent: LeadAgentConfig = Field(default_factory=LeadAgentConfig, alias="lead-agent",
         description="Lead agent defaults (model name, plan mode, ...)",
+    )
+
+    database: DatabaseConfig | None = Field(default_factory=DatabaseConfig,
+        description="Unified database backend for run/feedback metadata (memory or postgres)."
     )
 
     checkpointer: CheckpointerConfig | None = Field(default=None,
