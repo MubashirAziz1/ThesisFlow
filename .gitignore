@@ -1,5 +1,6 @@
 # Cursor / ECC project config
 .cursor/
+.agents/
 
 # Environment and secrets
 .env
