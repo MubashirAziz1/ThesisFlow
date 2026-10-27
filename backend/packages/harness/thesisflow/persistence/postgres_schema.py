@@ -1,18 +1,9 @@
-"""PostgreSQL schema helpers.
-
-Centralizes the driver-specific ways of pinning a connection's
-``search_path`` to a target schema. The two PostgreSQL drivers DeerFlow
-uses expect different mechanisms:
-
-"""
+""" PostgreSQL schema helpers. """
 
 from __future__ import annotations
 
 import re
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
-
-from deerflow.utils.file_io import await_drained
-
 
 def build_asyncpg_connect_args(schema: str) -> dict:
     """Return SQLAlchemy ``connect_args`` that pin asyncpg's search_path.
@@ -22,66 +13,6 @@ def build_asyncpg_connect_args(schema: str) -> dict:
     if not schema:
         return {}
     return {"server_settings": {"search_path": schema}}
-
-
-def build_psycopg_options(schema: str) -> str | None:
-    """Return the libpq ``options`` value for psycopg pool kwargs.
-
-    Empty *schema* yields ``None`` so callers can skip setting the kwarg.
-    """
-    if not schema:
-        return None
-    return f"-c search_path={schema}"
-
-
-def _split_libpq_options(options: str) -> list[str]:
-    """Tokenize a libpq ``options`` string.
-
-    libpq splits on unescaped whitespace; a backslash escapes the next
-    character (so ``\\ `` is a literal space and ``\\\\`` a literal backslash).
-    This is NOT POSIX shell quoting -- single/double quotes are literal here.
-    """
-    tokens: list[str] = []
-    current: list[str] = []
-    in_token = False
-    escaped = False
-    for char in options:
-        if escaped:
-            current.append(char)
-            escaped = False
-            in_token = True
-            continue
-        if char == "\\":
-            escaped = True
-            in_token = True
-            continue
-        if char.isspace():
-            if in_token:
-                tokens.append("".join(current))
-                current = []
-                in_token = False
-            continue
-        current.append(char)
-        in_token = True
-    if in_token:
-        tokens.append("".join(current))
-    return tokens
-
-
-def _join_libpq_options(tokens: list[str]) -> str:
-    """Join tokens into a libpq ``options`` string.
-
-    Whitespace and backslashes inside a token are backslash-escaped so libpq
-    keeps each token intact. ``shlex.join`` cannot be used: it emits POSIX
-    shell quoting (single quotes), which libpq treats as literal characters.
-
-    All whitespace bytes are escaped, not just spaces: ``_split_libpq_options``
-    preserves a backslash-escaped TAB/CR/LF as part of one token, so re-joining
-    with a bare whitespace byte would let libpq re-tokenize on it and corrupt a
-    caller's pre-existing ``options`` value.
-    """
-    escaped = [re.sub(r"([\\\s])", r"\\\1", token) for token in tokens]
-    return " ".join(escaped)
 
 
 def _merge_search_path_option(existing_options: str, schema: str) -> str:
@@ -149,12 +80,9 @@ def normalize_libpq_dsn(dsn: str) -> str:
 
 
 def dsn_with_search_path(dsn: str, schema: str) -> str:
-    """Return *dsn* with an ``options=-c search_path=<schema>`` query param.
+    """Return *dsn* with an ``options=-c search_path=<schema>`` query param. 
+       Used for psycopg ``from_conn_string`` call sites."""
 
-    Used for psycopg ``from_conn_string`` call sites that take a DSN
-    string rather than pool kwargs. The value contains a space and ``=``;
-    both are percent-encoded so libpq parses the URL correctly.
-    """
     dsn = normalize_libpq_dsn(dsn)
     if not schema:
         return dsn
@@ -167,11 +95,6 @@ def dsn_with_search_path(dsn: str, schema: str) -> str:
         params["options"] = _merge_search_path_option(params.get("options", ""), schema)
         return make_conninfo(**params)
 
-    # Rebuild the query by hand rather than with parse_qsl/urlencode: parse_qsl
-    # decodes '+' as a space (an HTML-form rule libpq does not apply), so
-    # round-tripping an existing parameter would rewrite a literal plus as '%20'
-    # and change the value the server sees. Everything but ``options`` is carried
-    # over exactly as written.
     options_values: list[str] = []
     preserved: list[str] = []
     for pair in parts.query.split("&"):
@@ -189,46 +112,3 @@ def dsn_with_search_path(dsn: str, schema: str) -> str:
     query = "&".join([*preserved, f"options={quote(options, safe='')}"])
     return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
 
-
-def ensure_postgres_schema(conn_string: str, schema: str, *, install_hint: str) -> None:
-    """Create *schema* over a fresh sync psycopg connection.
-
-    No-op when *schema* is empty. A missing ``psycopg`` dependency is mapped to
-    *install_hint* so callers surface the same actionable message they use for
-    the rest of the backend. The DSN is normalized so a SQLAlchemy ``+driver``
-    suffix does not reach libpq.
-    """
-    statement = create_schema_sql(schema)
-    if statement is None:
-        return
-    try:
-        import psycopg
-    except ImportError as exc:
-        raise ImportError(install_hint) from exc
-
-    # psycopg 3's ``Connection.__exit__`` only commits/rolls back -- it does NOT
-    # close the connection (a documented psycopg2->3 change). Use try/finally so
-    # the libpq connection is released deterministically, mirroring the async
-    # counterpart, instead of leaking it until GC.
-    conn = psycopg.connect(normalize_libpq_dsn(conn_string), autocommit=True)
-    try:
-        conn.execute(statement)
-    finally:
-        conn.close()
-
-
-async def ensure_postgres_schema_async(conn_string: str, schema: str, *, install_hint: str) -> None:
-    """Async counterpart of :func:`ensure_postgres_schema`."""
-    statement = create_schema_sql(schema)
-    if statement is None:
-        return
-    try:
-        import psycopg
-    except ImportError as exc:
-        raise ImportError(install_hint) from exc
-
-    conn = await psycopg.AsyncConnection.connect(normalize_libpq_dsn(conn_string), autocommit=True)
-    try:
-        await conn.execute(statement)
-    finally:
-        await await_drained(conn.close())

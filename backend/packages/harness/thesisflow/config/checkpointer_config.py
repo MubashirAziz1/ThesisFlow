@@ -2,6 +2,7 @@
 
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
+from .postgres_schema import validate_postgres_schema, POSTGRES_SCHEMA_PATTERN
 
 CheckpointerType = Literal["memory", "sqlite", "postgres"]
 

@@ -35,18 +35,8 @@ def resolve_checkpoint_graph_cache_max(database_config: Any, field_name: str, de
 
 
 CheckpointChannelMode = Literal["full", "delta"]
-
 DEFAULT_CHECKPOINT_SNAPSHOT_FREQUENCY = 10
 
-
-class CheckpointGraphCacheConfig(BaseModel):
-    """ Size cap for the process-local compiled checkpoint graph cache. """
-
-    accessor_graph_max: int = Field(
-        default=64,
-        ge=1,
-        description=("Max compiled thread-state accessor graphs cached by the gateway (keyed per assistant, channel mode, and snapshot cadence)."),
-    )
 
 class DatabaseConfig(BaseModel):
     backend: Literal["memory", "postgres"] = Field(
@@ -61,11 +51,6 @@ class DatabaseConfig(BaseModel):
             "LangGraph DeltaChannel for messages. Restart is required, and all "
             "processes sharing one checkpoint database must use the same value."
         ),
-    )
-    
-    checkpoint_graph_cache: CheckpointGraphCacheConfig = Field(
-        default_factory=CheckpointGraphCacheConfig,
-        description="Size caps for the compiled checkpoint graph caches. Hot-reloadable; not restart-required.",
     )
     
     postgres_url: str = Field(
@@ -117,8 +102,6 @@ class DatabaseConfig(BaseModel):
     @property
     def app_sqlalchemy_url(self) -> str:
         """SQLAlchemy async URL for the application ORM engine."""
-        if self.backend == "sqlite":
-            return f"sqlite+aiosqlite:///{self.sqlite_path}"
         if self.backend == "postgres":
             url = self.postgres_url
             if url.startswith("postgresql://"):
