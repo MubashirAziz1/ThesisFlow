@@ -8,6 +8,7 @@ from fastapi import Request
 
 
 from .manager import RunManager, RunRecord, RunStartOutcome
+from ...runtime.checkpointer import CheckpointChannelMode
 from ..stream_bridge import StreamBridge
 from ...config.app_config import AppConfig
 from .schemas import RunStatus
@@ -21,7 +22,11 @@ logger = logging.getLogger(__name__)
 class RunContext:
     """ Infrastructure dependencies for a single agent run. """
 
+    checkpointer: Any
     app_config: AppConfig | None = field(default=None)
+    checkpoint_channel_mode: CheckpointChannelMode = "full".
+    checkpoint_snapshot_frequency: int | None = None
+    
 
 def _build_runtime_context(
     thread_id: str,

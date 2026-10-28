@@ -37,6 +37,19 @@ def resolve_checkpoint_graph_cache_max(database_config: Any, field_name: str, de
 CheckpointChannelMode = Literal["full", "delta"]
 DEFAULT_CHECKPOINT_SNAPSHOT_FREQUENCY = 10
 
+class CheckpointDeltaConfig(BaseModel):
+    """Tuning knobs for ``checkpoint_channel_mode: delta``. """
+
+    snapshot_frequency: int = Field(
+        default=DEFAULT_CHECKPOINT_SNAPSHOT_FREQUENCY,
+        ge=1,
+        description=(
+            "DeltaChannel snapshot cadence: a full messages snapshot is stored "
+            "every N per-step writes (higher = smaller checkpoints, slower "
+            "materialization). Restart is required, and all processes sharing "
+            "one checkpoint database must use the same value."
+        ),
+    )
 
 class DatabaseConfig(BaseModel):
     backend: Literal["memory", "postgres"] = Field(
@@ -51,6 +64,11 @@ class DatabaseConfig(BaseModel):
             "LangGraph DeltaChannel for messages. Restart is required, and all "
             "processes sharing one checkpoint database must use the same value."
         ),
+    )
+
+    checkpoint_delta: CheckpointDeltaConfig = Field(
+        default_factory=CheckpointDeltaConfig,
+        description="Delta-mode checkpoint tuning. Only applies when checkpoint_channel_mode is 'delta'.",
     )
     
     postgres_url: str = Field(

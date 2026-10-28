@@ -17,6 +17,7 @@ from packages.harness.thesisflow.runtime.stream_bridge import StreamBridge
 from packages.harness.thesisflow.config.app_config import AppConfig, get_app_config
 from packages.harness.thesisflow.runtime.runs.worker import RunContext
 from packages.harness.thesisflow.runtime.stream_bridge.async_provider import make_stream_bridge
+from packages.harness.thesisflow.runtime.checkpoint_mode import freeze_checkpoint_channel_mode, freeze_checkpoint_snapshot_frequency
 
 
 @asynccontextmanager
@@ -27,6 +28,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
     async with AsyncExitStack() as stack:
         config = startup_config
+        app.state.checkpoint_channel_mode = freeze_checkpoint_channel_mode(config.database.checkpoint_channel_mode)
+        app.state.checkpoint_snapshot_frequency = freeze_checkpoint_snapshot_frequency(config.database.checkpoint_delta.snapshot_frequency)
 
         app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
         app.state.checkpointer = await stack.enter_async_context(make_checkpointer(config))
@@ -63,4 +66,9 @@ get_stream_bridge: Callable[[Request], StreamBridge] = _require("stream_bridge",
 
 def get_run_context(request: Request) -> RunContext:
     """ Build a :class:`RunContext` from ``app.state`` singletons. """
-    return RunContext(app_config=get_app_config())
+
+    return RunContext(
+        checkpointer = get_checkpojter(request),
+        checkpoint_channel_mode=getattr(request.app.state, "checkpoint_channel_mode", "full"),
+        checkpoint_snapshot_frequency=getattr(request.app.state, "checkpoint_snapshot_frequency", None),
+        app_config=get_app_config())
