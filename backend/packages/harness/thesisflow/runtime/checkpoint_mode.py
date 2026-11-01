@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 from ..config.database_config import DEFAULT_CHECKPOINT_SNAPSHOT_FREQUENCY, CheckpointChannelMode
 
+INTERNAL_CHECKPOINT_MODE_KEY = "__thesisflow_checkpoint_channel_mode"
+CHECKPOINT_MODE_METADATA_KEY = "thesisflow_checkpoint_channel_mode"
+CHECKPOINT_AGENT_NAME_METADATA_KEY = "thesisflow_checkpoint_agent_name"
+
 _frozen_checkpoint_channel_mode: CheckpointChannelMode | None = None
 _frozen_checkpoint_snapshot_frequency: int | None = None
 
