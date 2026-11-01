@@ -62,13 +62,13 @@ def _require(attr: str, label: str) -> Callable[[Request], T]:
 
 get_run_manager: Callable[[Request], RunManager] = _require("run_manager", "Run manager")
 get_stream_bridge: Callable[[Request], StreamBridge] = _require("stream_bridge", "Stream bridge")
-
+get_checkpointer: Callable[[Request], Checkpointer] = _require("checkpointer", "Checkpointer")
 
 def get_run_context(request: Request) -> RunContext:
     """ Build a :class:`RunContext` from ``app.state`` singletons. """
 
     return RunContext(
-        checkpointer = get_checkpojter(request),
+        checkpointer = get_checkpointer(request),
         checkpoint_channel_mode=getattr(request.app.state, "checkpoint_channel_mode", "full"),
         checkpoint_snapshot_frequency=getattr(request.app.state, "checkpoint_snapshot_frequency", None),
         app_config=get_app_config())

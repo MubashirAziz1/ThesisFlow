@@ -15,6 +15,7 @@ from .schemas import RunStatus
 from .stream_cleanup import close_agent_stream
 from ..stream_modes import normalize_stream_modes, to_langgraph_stream_modes
 from ..serialization import serialize
+from ...runtime.checkpoint_mode import inject_checkpoint_mode
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,8 @@ async def run_agent(
     stream_modes: list[str] | None = None,
 )-> None:
     
+    checkpointer = ctx.checkpointer
+    
     run_id = record.run_id
     thread_id = record.thread_id
     llm_error_fallback_message: str | None = None
@@ -78,6 +81,28 @@ async def run_agent(
 
         start_outcome = await run_manager.try_start(run_id)
         started = True
+
+        mode = ctx.checkpoint_channel_mode
+        inject_checkpoint_mode(config,mode)
+        checkpoint_config = {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns":"",
+            }
+        }
+        if checkpointer is not None:
+            configurable = config["configurable"]
+            selected_configurable = {
+                "thread_id": thread_id,
+                "checkpoint_ns": configurable.get("checkpoint_ns", ""),
+            }
+            for selector_key in ("checkpoint_id", "checkpoint_map"):
+                if selector_key in configurable:
+                    selected_configurable[selector_key] = configurable[selector_key]
+            selected_checkpoint_config = {
+                "configurable": selected_configurable,
+            }
+
 
         await bridge.publish(
             run_id,
@@ -96,6 +121,12 @@ async def run_agent(
             run_id,
             ctx.app_config,
         )
+
+        checkpoint_metadata = config.get("metadata")
+        if not isinstance(checkpoint_metadata, dict):
+            checkpoint_metadata = {}
+            config["metadata"] = checkpoint_metadata
+        checkpoint_metadata[CHECKPOINT_AGENT_NAME_METADATA_KEY] = DEFAULT_AGENT_NAME_METADATA_VALUE if checkpoint_agent_name is None else checkpoint_agent_name
 
 
         runnable_config = RunnableConfig(**config)

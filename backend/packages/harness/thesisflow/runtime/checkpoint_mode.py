@@ -23,8 +23,6 @@ def frozen_checkpoint_snapshot_frequency() -> int | None:
     """Return the process-frozen delta snapshot frequency, if already frozen."""
     return _frozen_checkpoint_snapshot_frequency
 
-
-
 def freeze_checkpoint_snapshot_frequency(snapshot_frequency: int) -> int:
     """ Freeze the delta snapshot cadence alongside the channel mode. """
     global _frozen_checkpoint_snapshot_frequency
@@ -34,3 +32,12 @@ def freeze_checkpoint_snapshot_frequency(snapshot_frequency: int) -> int:
         _frozen_checkpoint_snapshot_frequency = snapshot_frequency
     
     return _frozen_checkpoint_snapshot_frequency
+
+def inject_checkpoint_mode(config: dict[str, Any], mode: CheckpointChannelMode) -> None:
+    configurable = config.setdefault("configurable", {})
+    configurable[INTERNAL_CHECKPOINT_MODE_KEY] = mode
+    metadata = config.setdefault("metadata", {})
+    if mode == "delta":
+        metadata[CHECKPOINT_MODE_METADATA_KEY] = "delta"
+    else:
+        metadata.pop(CHECKPOINT_MODE_METADATA_KEY, None)
