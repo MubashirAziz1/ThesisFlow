@@ -114,7 +114,7 @@ class AppConfig(BaseModel):
 _app_config: AppConfig | None = None
 
 def _load_app_config(config_path: Path) -> AppConfig:
-    """ Load config from disk and refresh cache metadata. """
+    """ Load config from disk. """
 
     raw = config_path.read_bytes()
     return AppConfig._from_yaml_text(raw.decode("utf-8"), config_path)

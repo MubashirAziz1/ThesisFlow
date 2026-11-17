@@ -6,10 +6,7 @@ import re
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 def build_asyncpg_connect_args(schema: str) -> dict:
-    """Return SQLAlchemy ``connect_args`` that pin asyncpg's search_path.
-
-    Empty *schema* yields ``{}`` so the engine keeps the server default.
-    """
+    """ Return SQLAlchemy ``connect_args`` that pin asyncpg's search_path. """
     if not schema:
         return {}
     return {"server_settings": {"search_path": schema}}

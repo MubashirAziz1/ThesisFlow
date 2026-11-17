@@ -123,7 +123,7 @@ async def start_run(
     stream_modes = normalize_stream_modes(body.stream_mode)
     bridge = get_stream_bridge(request)
     run_mgr = get_run_manager(request) 
-    run_ctx = get_run_context(request)
+    run_ctx = await asyncio.to_thread(get_run_context, request)
 
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 

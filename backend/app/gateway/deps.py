@@ -25,11 +25,17 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
     """ Bootstrap and tear down all LangGraph runtime singletons. """
 
     from packages.harness.thesisflow.runtime.checkpointer.async_provider import make_checkpointer
-
+    from packages.harness.thesisflow.persistence.engine import close_engine, get_session_factory, init_engine_from_config
+    
     async with AsyncExitStack() as stack:
+
+
         config = startup_config
         app.state.checkpoint_channel_mode = freeze_checkpoint_channel_mode(config.database.checkpoint_channel_mode)
         app.state.checkpoint_snapshot_frequency = freeze_checkpoint_snapshot_frequency(config.database.checkpoint_delta.snapshot_frequency)
+
+        stack.push_async_callback(close_engine)
+        await init_engine_from_config(config.database)
 
         app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
         app.state.checkpointer = await stack.enter_async_context(make_checkpointer(config))
