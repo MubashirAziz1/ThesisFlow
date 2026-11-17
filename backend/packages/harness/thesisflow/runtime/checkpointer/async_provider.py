@@ -63,8 +63,12 @@ async def _select_inner_checkpointer(app_config: AppConfig) -> AsyncIterator[Che
 
 @contextlib.asynccontextmanager
 async def make_checkpointer(app_config: AppConfig | None = None) -> AsyncIterator[Checkpointer]:
-    """ Async context manager that yields a checkpointer for the caller's lifetime. """
+    """ Async context manager that yields a checkpointer for the caller's lifetime. 
+    Yields an ``InMemorySaver`` when no checkpointer is configured in *config.yaml*.
+    """
+    
     from packages.harness.thesisflow.runtime.checkpoint_mode import frozen_checkpoint_channel_mode
+
 
     if app_config is None:
         app_config = get_app_config()
