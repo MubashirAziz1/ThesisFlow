@@ -45,10 +45,6 @@ stream_bridge:
 # backend: memory  -- No persistence, data lost on restart
 
 database:
-  backend: memory
-  sqlite_dir: .deer-flow/data
-  pool_recycle: 300
-  command_timeout: 30
-  checkpoint_channel_mode: full
-  checkpoint_delta:
-    snapshot_frequency: 10
+  backend: postgres
+  postgres_url: $DATABASE_URL
+  postgres_schema: deerflow

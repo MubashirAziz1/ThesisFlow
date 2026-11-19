@@ -33,11 +33,11 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         config = startup_config
         app.state.checkpoint_channel_mode = freeze_checkpoint_channel_mode(config.database.checkpoint_channel_mode)
         app.state.checkpoint_snapshot_frequency = freeze_checkpoint_snapshot_frequency(config.database.checkpoint_delta.snapshot_frequency)
+        app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
 
         stack.push_async_callback(close_engine)
         await init_engine_from_config(config.database)
 
-        app.state.stream_bridge = await stack.enter_async_context(make_stream_bridge(config))
         app.state.checkpointer = await stack.enter_async_context(make_checkpointer(config))
         app.state.app_config = config
         app.state.run_manager = RunManager()
