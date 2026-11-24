@@ -5,6 +5,43 @@ from __future__ import annotations
 import re
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
+from ..config.postgres_schema import validate_postgres_schema
+
+
+def build_psycopg_options(schema: str) -> str:
+    """Return libpq options for a validated schema identifier."""
+    validate_postgres_schema(schema)
+    return f"-c search_path={schema}" if schema else ""
+
+
+def _split_libpq_options(options: str) -> list[str]:
+    """Split libpq options, where backslashes escape the next character."""
+    tokens: list[str] = []
+    token: list[str] = []
+    escaped = False
+    for char in options:
+        if escaped:
+            token.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char.isspace():
+            if token:
+                tokens.append("".join(token))
+                token = []
+        else:
+            token.append(char)
+    if escaped:
+        token.append("\\")
+    if token:
+        tokens.append("".join(token))
+    return tokens
+
+
+def _join_libpq_options(tokens: list[str]) -> str:
+    """Escape whitespace and backslashes when rebuilding libpq options."""
+    return " ".join(re.sub(r"([\\\s])", r"\\\1", token) for token in tokens)
+
 def build_asyncpg_connect_args(schema: str) -> dict:
     """ Return SQLAlchemy ``connect_args`` that pin asyncpg's search_path. """
     if not schema:
@@ -56,8 +93,6 @@ def create_schema_sql(schema: str) -> str | None:
     """
     if not schema:
         return None
-    from deerflow.config.postgres_schema import validate_postgres_schema
-
     validate_postgres_schema(schema)
     return f'CREATE SCHEMA IF NOT EXISTS "{schema}"'
 

@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         startup_config = get_app_config()
         app.state.app_config = startup_config
-        logger.info(f"Startup configuration loaded: {startup_config}")
+        logger.info("Startup configuration loaded (database backend=%s)", startup_config.database.backend)
 
     except Exception as e:
         error_msg = f"Failed to load shared app_configuration during startup: {e}"

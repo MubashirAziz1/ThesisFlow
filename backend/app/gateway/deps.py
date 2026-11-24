@@ -28,8 +28,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
     from packages.harness.thesisflow.persistence.engine import close_engine, get_session_factory, init_engine_from_config
     
     async with AsyncExitStack() as stack:
-
-
+    
         config = startup_config
         app.state.checkpoint_channel_mode = freeze_checkpoint_channel_mode(config.database.checkpoint_channel_mode)
         app.state.checkpoint_snapshot_frequency = freeze_checkpoint_snapshot_frequency(config.database.checkpoint_delta.snapshot_frequency)
@@ -77,4 +76,5 @@ def get_run_context(request: Request) -> RunContext:
         checkpointer = get_checkpointer(request),
         checkpoint_channel_mode=getattr(request.app.state, "checkpoint_channel_mode", "full"),
         checkpoint_snapshot_frequency=getattr(request.app.state, "checkpoint_snapshot_frequency", None),
+        #To add new configurations during a run without restarting the gateway.
         app_config=get_app_config())

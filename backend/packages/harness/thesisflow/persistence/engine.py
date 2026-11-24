@@ -160,7 +160,7 @@ async def init_engine(
                 "database.backend is set to 'postgres' but asyncpg is not installed.Please Install it "
             ) from None
 
-        from deerflow.persistence.postgres_schema import build_asyncpg_connect_args
+        from .postgres_schema import build_asyncpg_connect_args
 
         pg_connect_args = build_asyncpg_connect_args(postgres_schema)
         _engine = create_async_engine(
