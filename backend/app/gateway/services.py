@@ -44,6 +44,20 @@ def format_sse(event: str, data: Any, *, event_id: str | None = None) -> str:
     parts.append("")
     return "\n".join(parts)
 
+def _canonical_run_record_input(
+    raw_input: dict[str, Any] | None,
+    graph_input: object,
+) -> dict[str, Any] | None:
+    """Persist the same normalized messages, goal, and todos that cross run admission."""
+    if not isinstance(graph_input, dict): #When the Clarification or edit run is submitted.
+        return raw_input
+    canonical = dict(raw_input or {})
+    messages = graph_input.get("messages")
+    if isinstance(messages, list):
+        canonical["messages"] = [message.model_dump(mode="json") if isinstance(message, BaseMessage) else message for message in messages]
+   
+    return canonical
+
 
 def normalize_input(raw_input: dict[str, Any] | None) -> dict[str, Any]:
     """ Convert LangGraph Platform input format to LangChain state dict. """
@@ -189,11 +203,14 @@ async def start_run(
                 status_code=400,
                 detail=f"Model {model_name!r} is not in the configured model allowlist",
             )
-  
-    config = build_run_config(thread_id, body.config)
+
+    normalized_input= normalize_input(body.input)
+    agent_factory = resolve_agent_factory(body.assistant_id) 
+    graph_input = normalized_input if body.input is not None else None
+    config = build_run_config(thread_id, body.config) #Build the LangGraph RunnableConfig for a run
     await apply_checkpoint_to_run_config(config, body=body, thread_id=thread_id, request=request)
-    agent_factory = resolve_agent_factory(body.assistant_id)
-    graph_input = normalize_input(body.input)
+    
+    run_record_input = _canonical_run_record_input(body.input, graph_input)
 
     async def agent_worker(record: RunRecord) -> None:
 
